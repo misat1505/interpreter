@@ -1,0 +1,39 @@
+import "../stdlib/string.rp";
+import "../stdlib/vector.rp";
+
+let name = "   Hello World   ";
+
+println(str_trim(name));
+println(str_to_upper(name));
+println(str_to_lower(name));
+println(str_contains(name, "World") as str);
+println(str_starts_with(name, "   Hel") as str);
+println(str_ends_with(name, "   ") as str);
+println(str_replace_all(name, "World", "Raptor"));
+
+let words = str_split("one,two,three", ",");
+println(str_vector_join(&words, " | "));
+
+let numbers: i64[] = [5, 2, 9, 1, 5, 3];
+
+println(i64_vector_sum(&numbers) as str);
+println(i64_vector_min(&numbers) as str);
+println(i64_vector_max(&numbers) as str);
+println(i64_vector_average(&numbers) as str);
+
+let sorted = i64_vector_sort(&numbers);
+println(vector_stringify(sorted));
+let unique = i64_vector_distinct(&numbers);
+println(vector_stringify(unique));
+let reversed = i64_vector_reverse(&numbers);
+println(vector_stringify(reversed));
+
+let first_three = i64_vector_take(&numbers, 3);
+println(vector_stringify(first_three));
+let without_first = i64_vector_skip(&numbers, 1);
+println(vector_stringify(without_first));
+
+let range = i64_vector_range(0, 10);
+println(vector_stringify(range));
+let odds = i64_vector_range_step(1, 20, 2);
+println(vector_stringify(odds));
