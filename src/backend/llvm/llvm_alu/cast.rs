@@ -32,8 +32,42 @@ impl LlvmAlu {
         }
 
         match (value, to_type) {
-            // Same type.
-            (value, target_type) if value.to_type() == *target_type => Ok(value),
+            // Same type (Str excluded - casting str->str still needs a
+            // fresh, independently owned copy; see the explicit arm below).
+            (value, target_type) if value.to_type() == *target_type && !matches!(value, LlvmValue::Str(_)) => Ok(value),
+
+            // String -> String (identity "cast"): still produces a fresh,
+            // independently owned copy, consistent with every other string
+            // assignment in the language.
+            (LlvmValue::Str(value), Type::Str) => {
+                let data = Self::str_data_ptr(builder, value, span)?;
+
+                let len = builder
+                    .build_call(libc.strlen_fn, &[data.into()], "str_identity.len")
+                    .map_err(|err| Self::map_err(err, span))?
+                    .try_as_basic_value()
+                    .basic()
+                    .expect("strlen should return a value")
+                    .into_int_value();
+
+                let size = builder
+                    .build_int_add(len, len.get_type().const_int(1, false), "str_identity.size")
+                    .map_err(|err| Self::map_err(err, span))?;
+
+                let new_data = builder
+                    .build_call(libc.malloc_fn, &[size.into()], "str_identity.malloc")
+                    .map_err(|err| Self::map_err(err, span))?
+                    .try_as_basic_value()
+                    .basic()
+                    .expect("malloc should return a value")
+                    .into_pointer_value();
+
+                builder
+                    .build_call(libc.strcpy_fn, &[new_data.into(), data.into()], "str_identity.strcpy")
+                    .map_err(|err| Self::map_err(err, span))?;
+
+                Self::wrap_str_header(builder, libc, new_data, span).map(LlvmValue::Str)
+            }
 
             // ============================================================
             // Integer -> Integer
@@ -251,8 +285,10 @@ impl LlvmAlu {
             // String -> F64
             // ============================================================
             (LlvmValue::Str(value), Type::F64) => {
+                let data = Self::str_data_ptr(builder, value, span)?;
+
                 let call = builder
-                    .build_call(libc.atof_fn, &[value.into()], "atof_call")
+                    .build_call(libc.atof_fn, &[data.into()], "atof_call")
                     .map_err(|err| Self::map_err(err, span))?;
 
                 let value = call.try_as_basic_value().basic().expect("atof should return a value").into_float_value();
@@ -264,8 +300,10 @@ impl LlvmAlu {
             // String -> Bool
             // ============================================================
             (LlvmValue::Str(value), Type::Bool) => {
+                let data = Self::str_data_ptr(builder, value, span)?;
+
                 let call = builder
-                    .build_call(libc.strlen_fn, &[value.into()], "strlen_call")
+                    .build_call(libc.strlen_fn, &[data.into()], "strlen_call")
                     .map_err(|err| Self::map_err(err, span))?;
 
                 let len = call.try_as_basic_value().basic().expect("strlen should return a value").into_int_value();
@@ -299,7 +337,7 @@ impl LlvmAlu {
             // ============================================================
             // Bool -> String
             // ============================================================
-            (LlvmValue::Bool(value), Type::Str) => Self::bool_to_str(builder, value, span),
+            (LlvmValue::Bool(value), Type::Str) => Self::bool_to_str(builder, libc, value, span),
 
             // ============================================================
             // Bool -> Integer
@@ -338,7 +376,7 @@ impl LlvmAlu {
             // ============================================================
             (value, target_type) => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Cannot cast '{:?}' to '{:?}'.", value.to_type(), target_type),
+                format!("Cannot cast '{}' to '{}'.", value.to_type(), target_type),
                 span,
             ))),
         }
@@ -348,6 +386,7 @@ impl LlvmAlu {
     // Integer casts + overflow checking
     // ========================================================================
 
+    #[allow(clippy::too_many_arguments)]
     fn int_cast<'ctx>(
         &self,
         builder: &Builder<'ctx>,
@@ -454,6 +493,7 @@ impl LlvmAlu {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn emit_integer_overflow_check<'ctx>(
         &self,
         builder: &Builder<'ctx>,
@@ -801,8 +841,10 @@ impl LlvmAlu {
         bits: u32,
         span: Span,
     ) -> Result<LlvmValue<'ctx>, Box<dyn IError>> {
+        let data = Self::str_data_ptr(builder, value, span)?;
+
         let call = builder
-            .build_call(libc.atoll_fn, &[value.into()], "string_to_int")
+            .build_call(libc.atoll_fn, &[data.into()], "string_to_int")
             .map_err(|err| Self::map_err(err, span))?;
 
         let parsed = call.try_as_basic_value().basic().expect("atoll should return a value").into_int_value();
@@ -821,8 +863,10 @@ impl LlvmAlu {
         bits: u32,
         span: Span,
     ) -> Result<LlvmValue<'ctx>, Box<dyn IError>> {
+        let data = Self::str_data_ptr(builder, value, span)?;
+
         let call = builder
-            .build_call(libc.atoll_fn, &[value.into()], "string_to_uint")
+            .build_call(libc.atoll_fn, &[data.into()], "string_to_uint")
             .map_err(|err| Self::map_err(err, span))?;
 
         let parsed = call.try_as_basic_value().basic().expect("atoll should return a value").into_int_value();
@@ -890,6 +934,7 @@ impl LlvmAlu {
 
     pub(in crate::backend::llvm::llvm_alu) fn bool_to_str<'ctx>(
         builder: &Builder<'ctx>,
+        libc: &LibcFunctions<'ctx>,
         value: IntValue<'ctx>,
         span: Span,
     ) -> Result<LlvmValue<'ctx>, Box<dyn IError>> {
@@ -901,10 +946,39 @@ impl LlvmAlu {
             .build_global_string_ptr("false", "false_str")
             .map_err(|err| Self::map_err(err, span))?;
 
-        builder
+        let picked = builder
             .build_select(value, true_str.as_pointer_value(), false_str.as_pointer_value(), "bool_to_str")
-            .map(|value| LlvmValue::Str(value.into_pointer_value()))
-            .map_err(|err| Self::map_err(err, span))
+            .map_err(|err| Self::map_err(err, span))?
+            .into_pointer_value();
+
+        // `picked` points at a read-only global constant - heap-duplicate
+        // it before wrapping in a header, since `release_str` will
+        // eventually `free()` whatever the header's `data` field points to.
+        let len = builder
+            .build_call(libc.strlen_fn, &[picked.into()], "bool_to_str.len")
+            .map_err(|err| Self::map_err(err, span))?
+            .try_as_basic_value()
+            .basic()
+            .expect("strlen should return a value")
+            .into_int_value();
+
+        let size = builder
+            .build_int_add(len, len.get_type().const_int(1, false), "bool_to_str.size")
+            .map_err(|err| Self::map_err(err, span))?;
+
+        let dup = builder
+            .build_call(libc.malloc_fn, &[size.into()], "bool_to_str.malloc")
+            .map_err(|err| Self::map_err(err, span))?
+            .try_as_basic_value()
+            .basic()
+            .expect("malloc should return a value")
+            .into_pointer_value();
+
+        builder
+            .build_call(libc.strcpy_fn, &[dup.into(), picked.into()], "bool_to_str.strcpy")
+            .map_err(|err| Self::map_err(err, span))?;
+
+        Self::wrap_str_header(builder, libc, dup, span).map(LlvmValue::Str)
     }
 
     fn signed_int_to_str<'ctx>(
@@ -990,7 +1064,7 @@ impl LlvmAlu {
             )
             .map_err(|err| Self::map_err(err, span))?;
 
-        Ok(LlvmValue::Str(buffer))
+        Self::wrap_str_header(builder, libc, buffer, span).map(LlvmValue::Str)
     }
 
     fn float_to_str<'ctx>(
@@ -1023,6 +1097,6 @@ impl LlvmAlu {
             )
             .map_err(|err| Self::map_err(err, span))?;
 
-        Ok(LlvmValue::Str(buffer))
+        Self::wrap_str_header(builder, libc, buffer, span).map(LlvmValue::Str)
     }
 }

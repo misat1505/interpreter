@@ -1,22 +1,324 @@
-# Run this file and then visit http://localhost:8080 in the browser
+# Web dev in Raptor - run this file and then visit http://localhost:8080 in the browser
+# Try:     curl http://localhost:8080/users
+#          curl -X POST -d "name=Anna" http://localhost:8080/users
+#          curl -X PUT -d "name=Anna K." http://localhost:8080/users/1
+#          curl -X DELETE http://localhost:8080/users/2
 
-fn get_all_users(): str[] {
-  str[] users = ["Bob", "Fred", "Jack"];
-  return users;
+fn str_substring(&str s, i64 start, i64 end): str {
+    let result = "";
+    for (let i = start; i < end; i += 1) {
+        result += s[i];
+    }
+    return result;
 }
 
-i64 port = 8080;
-i64 listener = tcp_listen(port);
-println("Listening on " + port as str + "...");
-println("Open browser: http://localhost:" + port as str);
-
-for (;true;) {
-  i64 client = tcp_accept(listener);
-  str request = tcp_read(client);
-  println(request);
-
-  str response = vector_stringify(get_all_users());
-
-  tcp_write(client, "HTTP/1.1 200 OK\r\nContent-Length: " + str_len(response) as str + "\r\n\r\n" + response);
-  tcp_close(client);
+fn str_index_of_str(&str s, str target): i64 {
+    let s_len = str_len(s);
+    let t_len = str_len(target);
+    for (let i = 0; i <= s_len - t_len; i += 1) {
+        let matched = true;
+        for (let j = 0; j < t_len; j += 1) {
+            if (s[i + j] != target[j]) {
+                matched = false;
+            }
+        }
+        if (matched) return i;
+    }
+    return -1;
 }
+
+fn str_split(&str s, str sep): str[] {
+    let result: str[] = [];
+    let remaining = s;
+    let sep_len = str_len(sep);
+
+    while (true) {
+        let idx = str_index_of_str(&remaining, sep);
+        if (idx < 0) {
+            vector_push(&result, remaining);
+            return result;
+        }
+        vector_push(&result, str_substring(&remaining, 0, idx));
+        remaining = str_substring(&remaining, idx + sep_len, str_len(remaining));
+    }
+}
+
+fn str_starts_with(&str s, str prefix): bool {
+    return str_index_of_str(&s, prefix) == 0;
+}
+
+fn char_to_digit(char c): i64 {
+    if (c == '0') return 0;
+    if (c == '1') return 1;
+    if (c == '2') return 2;
+    if (c == '3') return 3;
+    if (c == '4') return 4;
+    if (c == '5') return 5;
+    if (c == '6') return 6;
+    if (c == '7') return 7;
+    if (c == '8') return 8;
+    if (c == '9') return 9;
+    return -1;
+}
+
+fn str_to_i64(&str s): i64 {
+    let result = 0;
+    for (let i = 0; i < str_len(s); i += 1) {
+        result = result * 10 + char_to_digit(s[i]);
+    }
+    return result;
+}
+
+fn vector_remove_at(&User[] users, i64 index): User[] {
+    let result: User[] = [];
+    for (let i = 0; i < vector_size(&users); i += 1) {
+        if (i != index) {
+            vector_push(&result, users[i]);
+        }
+    }
+    return result;
+}
+
+# -------------------
+# User
+# -------------------
+struct User {
+    i64 id,
+    str name
+};
+
+fn user_json(&User user): str {
+    return "{ \"id\": " + user.id as str + ", \"name\": \"" + user.name + "\" }";
+}
+
+fn empty_user(): User {
+    return User { id: 0, name: "" };
+}
+
+struct FindResult {
+    bool found,
+    User user
+};
+
+# -------------------
+# UserRepository
+# -------------------
+struct UserRepository {
+    User[] users,
+    i64 next_id
+};
+
+fn user_repository_get_all(&UserRepository repo): User[] {
+    return repo.users;
+}
+
+fn user_repository_find_by_id(&UserRepository repo, i64 id): FindResult {
+    for (let i = 0; i < vector_size(&repo.users); i += 1) {
+        if (repo.users[i].id == id) {
+            return FindResult { found: true, user: repo.users[i] };
+        }
+    }
+    return FindResult { found: false, user: empty_user() };
+}
+
+fn user_repository_create(&UserRepository repo, str name): User {
+    let user = User { id: repo.next_id, name: name };
+    vector_push(&repo.users, user);
+    repo.next_id += 1;
+    return user;
+}
+
+fn user_repository_update(&UserRepository repo, i64 id, str name): FindResult {
+    for (let i = 0; i < vector_size(&repo.users); i += 1) {
+        if (repo.users[i].id == id) {
+            repo.users[i].name = name;
+            return FindResult { found: true, user: repo.users[i] };
+        }
+    }
+    return FindResult { found: false, user: empty_user() };
+}
+
+fn user_repository_delete(&UserRepository repo, i64 id): bool {
+    for (let i = 0; i < vector_size(&repo.users); i += 1) {
+        if (repo.users[i].id == id) {
+            repo.users = vector_remove_at(&repo.users, i);
+            return true;
+        }
+    }
+    return false;
+}
+
+# -------------------
+# json utils
+# -------------------
+fn user_list_json(&User[] users): str {
+    let text = "[";
+    for (let i = 0; i < vector_size(&users); i += 1) {
+        if (i != 0) text += ", ";
+        text += user_json(&users[i]);
+    }
+    text += ']';
+    return text;
+}
+
+# -------------------
+# http request / response
+# -------------------
+struct HttpRequest {
+    str method,
+    str path,
+    str body
+};
+
+struct HttpResponse {
+    i64 status,
+    str body
+};
+
+fn status_text(i64 status): str {
+    if (status == 200) return "OK";
+    if (status == 201) return "Created";
+    if (status == 400) return "Bad Request";
+    if (status == 404) return "Not Found";
+    return "Internal Server Error";
+}
+
+fn parse_http_request(&str raw): HttpRequest {
+    let sep_idx = str_index_of_str(&raw, "\r\n\r\n");
+    let head = raw;
+    let body = "";
+    if (sep_idx >= 0) {
+        head = str_substring(&raw, 0, sep_idx);
+        body = str_substring(&raw, sep_idx + str_len("\r\n\r\n"), str_len(raw));
+    }
+
+    let line_end = str_index_of_str(&head, "\r\n");
+    let request_line = head;
+    if (line_end >= 0) {
+        request_line = str_substring(&head, 0, line_end);
+    }
+
+    let parts = str_split(&request_line, " ");
+    return HttpRequest { method: parts[0], path: parts[1], body: body };
+}
+
+fn build_http_response(&HttpResponse res): str {
+    let status_line = "HTTP/1.1 " + res.status as str + " " + status_text(res.status) + "\r\n";
+    let headers = "Content-Type: application/json\r\nContent-Length: " + str_len(res.body) as str + "\r\n\r\n";
+    return status_line + headers + res.body;
+}
+
+fn extract_id_from_path(&str path): i64 {
+    let segments = str_split(&path, "/");
+    return str_to_i64(&segments[2]);
+}
+
+fn parse_field(&str body, str key): str {
+    let search_key = key + "=";
+    let idx = str_index_of_str(&body, search_key);
+    if (idx < 0) return "";
+
+    let start = idx + str_len(search_key);
+    let rest = str_substring(&body, start, str_len(body));
+    let end = str_index_of_str(&rest, "&");
+    if (end < 0) return rest;
+    return str_substring(&rest, 0, end);
+}
+
+# -------------------
+# handlers (CRUD)
+# -------------------
+fn handle_get_all(&UserRepository repo): HttpResponse {
+    let users = user_repository_get_all(&repo);
+    return HttpResponse { status: 200, body: user_list_json(&users) };
+}
+
+fn handle_get_one(&UserRepository repo, i64 id): HttpResponse {
+    let result = user_repository_find_by_id(&repo, id);
+    if (result.found) {
+        return HttpResponse { status: 200, body: user_json(&result.user) };
+    }
+    return HttpResponse { status: 404, body: "{ \"error\": \"User not found\" }" };
+}
+
+fn handle_create(&UserRepository repo, &str body): HttpResponse {
+    let name = parse_field(&body, "name");
+    if (str_len(name) == 0) {
+        return HttpResponse { status: 400, body: "{ \"error\": \"Field 'name' is required\" }" };
+    }
+    let user = user_repository_create(&repo, name);
+    return HttpResponse { status: 201, body: user_json(&user) };
+}
+
+fn handle_update(&UserRepository repo, i64 id, &str body): HttpResponse {
+    let name = parse_field(&body, "name");
+    if (str_len(name) == 0) {
+        return HttpResponse { status: 400, body: "{ \"error\": \"Field 'name' is required\" }" };
+    }
+    let result = user_repository_update(&repo, id, name);
+    if (result.found) {
+        return HttpResponse { status: 200, body: user_json(&result.user) };
+    }
+    return HttpResponse { status: 404, body: "{ \"error\": \"User not found\" }" };
+}
+
+fn handle_delete(&UserRepository repo, i64 id): HttpResponse {
+    if (user_repository_delete(&repo, id)) {
+        return HttpResponse { status: 200, body: "{ \"message\": \"User deleted\" }" };
+    }
+    return HttpResponse { status: 404, body: "{ \"error\": \"User not found\" }" };
+}
+
+# -------------------
+# router
+# -------------------
+fn route_request(&UserRepository repo, &HttpRequest req): HttpResponse {
+    if (req.path == "/users") {
+        if (req.method == "GET") return handle_get_all(&repo);
+        if (req.method == "POST") return handle_create(&repo, &req.body);
+        return HttpResponse { status: 400, body: "{ \"error\": \"Unsupported method\" }" };
+    }
+
+    if (str_starts_with(&req.path, "/users/")) {
+        let id = extract_id_from_path(&req.path);
+        if (req.method == "GET") return handle_get_one(&repo, id);
+        if (req.method == "PUT") return handle_update(&repo, id, &req.body);
+        if (req.method == "DELETE") return handle_delete(&repo, id);
+        return HttpResponse { status: 400, body: "{ \"error\": \"Unsupported method\" }" };
+    }
+
+    return HttpResponse { status: 404, body: "{ \"error\": \"Route not found\" }" };
+}
+
+# -------------------
+# main
+# -------------------
+fn main(): void {
+    let port = 8080;
+    let listener = tcp_listen(port);
+    println("Listening on " + port as str + "...");
+    println("Simple CRUD API: GET/POST /users, GET/PUT/DELETE /users/{id}");
+
+    let repo = UserRepository {
+        users: [
+            User { id: 1, name: "Bob" },
+            User { id: 2, name: "Fred" },
+            User { id: 3, name: "Jack" }
+        ],
+        next_id: 4
+    };
+
+    while (true) {
+        let client = tcp_accept(listener);
+        let raw_request = tcp_read(client);
+        let req = parse_http_request(&raw_request);
+
+        println(req.method + " " + req.path);
+
+        let response = route_request(&repo, &req);
+        tcp_write(client, build_http_response(&response));
+        tcp_close(client);
+    }
+}
+
+main();

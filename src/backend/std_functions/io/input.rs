@@ -10,7 +10,7 @@ use inkwell::AddressSpace;
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -30,7 +30,7 @@ pub fn input() -> StdFunction {
         let expected_types = vec![Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(value) = params.get(0) {
+        if let Some(value) = params.first() {
             actual_types.push(value.borrow().to_type());
             let value = value.borrow();
 
@@ -57,7 +57,7 @@ pub fn input() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'input' expects exactly one argument."),
@@ -66,11 +66,35 @@ pub fn input() -> StdFunction {
         })?;
 
         compiler.visit_expression(&arg.value.value)?;
-        let prompt_ptr = compiler.read_last_value()?.into_str_value(span)?;
+        let prompt_value = compiler.read_last_value()?;
 
-        let owned_ptr = compiler.build_string_copy(prompt_ptr, span)?;
+        let prompt_ptr = match &prompt_value {
+            LlvmValue::Str(ptr) => {
+                let i8_type = compiler.context().i8_type();
+                let i8_ptr_type = compiler.context().ptr_type(AddressSpace::default());
 
-        // printf("%s", prompt)
+                let data_field = unsafe {
+                    compiler
+                        .builder()
+                        .build_gep(i8_type, *ptr, &[compiler.context().i64_type().const_int(8, false)], "prompt.data.field")
+                }
+                .map_err(err)?;
+
+                compiler
+                    .builder()
+                    .build_load(i8_ptr_type, data_field, "prompt.data")
+                    .map_err(err)?
+                    .into_pointer_value()
+            }
+            other => {
+                return Err(Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("'input' expects a string, got '{}'.", other.to_type()),
+                    span,
+                )));
+            }
+        };
+
         let format_str = compiler
             .builder()
             .build_global_string_ptr("%s", "fmt.prompt")
@@ -81,7 +105,7 @@ pub fn input() -> StdFunction {
 
         compiler
             .builder()
-            .build_call(printf_fn, &[format_str.into(), owned_ptr.into()], "printf.prompt")
+            .build_call(printf_fn, &[format_str.into(), prompt_ptr.into()], "printf.prompt")
             .map_err(err)?;
 
         let null_stream = compiler.context().ptr_type(AddressSpace::default()).const_null();
@@ -91,17 +115,17 @@ pub fn input() -> StdFunction {
             .build_call(compiler.libc().fflush_fn, &[null_stream.into()], "fflush.stdout")
             .map_err(err)?;
 
-        let free_fn = compiler.libc().free_fn;
-
-        compiler.builder().build_call(free_fn, &[owned_ptr.into()], "free.prompt").map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&arg.value.value.value) {
+            compiler.release_value(&prompt_value, arg.value.value.span)?;
+        }
 
         let context = compiler.context();
         let i64_type = context.i64_type();
         let i32_type = context.i32_type();
+        let i8_type = context.i8_type();
 
         const BUF_SIZE: u64 = 4096;
 
-        // malloc(4096)
         let malloc_fn = compiler.libc().malloc_fn;
 
         let buf = compiler
@@ -113,7 +137,6 @@ pub fn input() -> StdFunction {
             .expect("malloc should return a value")
             .into_pointer_value();
 
-        // read(0, buf, 4095)
         let read_fn = compiler.libc().read_fn;
 
         let n = compiler
@@ -133,18 +156,12 @@ pub fn input() -> StdFunction {
             .expect("read should return a value")
             .into_int_value();
 
-        // buf[n] = '\0'
-        let end_ptr = unsafe { compiler.builder().build_gep(context.i8_type(), buf, &[n], "input.end").map_err(err)? };
+        let end_ptr = unsafe { compiler.builder().build_gep(i8_type, buf, &[n], "input.end").map_err(err)? };
 
-        compiler
-            .builder()
-            .build_store(end_ptr, context.i8_type().const_int(0, false))
-            .map_err(err)?;
+        compiler.builder().build_store(end_ptr, i8_type.const_int(0, false)).map_err(err)?;
 
-        // Sprawdź, czy ostatni znak to '\n'.
-        // Jeżeli tak, zamień go na '\0'.
-        let zero = context.i64_type().const_zero();
-        let one = context.i64_type().const_int(1, false);
+        let zero = i64_type.const_zero();
+        let one = i64_type.const_int(1, false);
 
         let has_input = compiler
             .builder()
@@ -176,20 +193,15 @@ pub fn input() -> StdFunction {
 
         let last_index = compiler.builder().build_int_sub(n, one, "input.last_index").map_err(err)?;
 
-        let last_ptr = unsafe {
-            compiler
-                .builder()
-                .build_gep(context.i8_type(), buf, &[last_index], "input.last")
-                .map_err(err)?
-        };
+        let last_ptr = unsafe { compiler.builder().build_gep(i8_type, buf, &[last_index], "input.last").map_err(err)? };
 
         let last_char = compiler
             .builder()
-            .build_load(context.i8_type(), last_ptr, "input.last_char")
+            .build_load(i8_type, last_ptr, "input.last_char")
             .map_err(err)?
             .into_int_value();
 
-        let newline = context.i8_type().const_int(b'\n' as u64, false);
+        let newline = i8_type.const_int(b'\n' as u64, false);
 
         let is_newline = compiler
             .builder()
@@ -205,16 +217,43 @@ pub fn input() -> StdFunction {
 
         compiler.builder().position_at_end(remove_newline_block);
 
-        compiler
-            .builder()
-            .build_store(last_ptr, context.i8_type().const_int(0, false))
-            .map_err(err)?;
+        compiler.builder().build_store(last_ptr, i8_type.const_int(0, false)).map_err(err)?;
 
         compiler.builder().build_unconditional_branch(done_block).map_err(err)?;
 
         compiler.builder().position_at_end(done_block);
 
-        compiler.set_last_value(LlvmValue::Str(buf));
+        let header = compiler
+            .builder()
+            .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "input.header")
+            .map_err(err)?
+            .try_as_basic_value()
+            .basic()
+            .expect("malloc should return a value")
+            .into_pointer_value();
+
+        let refcount_field = unsafe {
+            compiler
+                .builder()
+                .build_gep(i8_type, header, &[i64_type.const_zero()], "input.refcount.field")
+                .map_err(err)?
+        };
+
+        compiler
+            .builder()
+            .build_store(refcount_field, i64_type.const_int(1, false))
+            .map_err(err)?;
+
+        let data_field = unsafe {
+            compiler
+                .builder()
+                .build_gep(i8_type, header, &[i64_type.const_int(8, false)], "input.data.field")
+                .map_err(err)?
+        };
+
+        compiler.builder().build_store(data_field, buf).map_err(err)?;
+
+        compiler.set_last_value(LlvmValue::Str(header));
 
         Ok(())
     };

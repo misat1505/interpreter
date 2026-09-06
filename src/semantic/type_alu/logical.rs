@@ -14,7 +14,7 @@ impl TypeALU {
 
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform concatenation between values of type '{:?}' and '{:?}'.", a, b),
+                format!("Cannot perform concatenation between values of type '{}' and '{}'.", a, b),
                 span,
             )),
         }
@@ -26,7 +26,7 @@ impl TypeALU {
 
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform alternative between values of type '{:?}' and '{:?}'.", a, b),
+                format!("Cannot perform alternative between values of type '{}' and '{}'.", a, b),
                 span,
             )),
         }

@@ -68,24 +68,24 @@ impl ImportResolver {
 
     fn merge_program(&mut self, current_path: &str, program: Program, merged: &mut Program) -> Result<(), Box<dyn IError>> {
         for (name, function) in program.functions {
-            self.check_collision(&name, function.span.clone(), merged)?;
+            self.check_collision(&name, function.span, merged)?;
             merged.functions.insert(name, function);
         }
 
         for (name, extern_function) in program.extern_functions {
-            self.check_collision(&name, extern_function.span.clone(), merged)?;
+            self.check_collision(&name, extern_function.span, merged)?;
             merged.extern_functions.insert(name, extern_function);
         }
 
         for (name, declared_type) in program.declared_types {
-            self.check_collision(&name, declared_type.span.clone(), merged)?;
+            self.check_collision(&name, declared_type.span, merged)?;
             merged.declared_types.insert(name, declared_type);
         }
 
         for statement in program.statements {
             match &statement.value {
                 Statement::Import { path } => {
-                    self.handle_import(current_path, path, statement.span.clone(), merged)?;
+                    self.handle_import(current_path, path, statement.span, merged)?;
                 }
                 _ => merged.statements.push(statement),
             }

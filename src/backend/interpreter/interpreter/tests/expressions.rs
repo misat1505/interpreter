@@ -374,7 +374,7 @@ fn interpret_vector_literal_non_empty() {
             assert_eq!(*values.borrow()[1].borrow(), Value::I64(2));
             assert_eq!(*values.borrow()[2].borrow(), Value::I64(3));
         }
-        other => panic!("expected Vector, got {:?}", other),
+        other => panic!("expected Vector, got {}", other),
     }
 }
 
@@ -389,7 +389,7 @@ fn interpret_vector_literal_empty() {
             assert_eq!(*kind, Type::Void);
             assert!(values.borrow().is_empty());
         }
-        other => panic!("expected Vector, got {:?}", other),
+        other => panic!("expected Vector, got {}", other),
     }
 }
 

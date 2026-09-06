@@ -23,7 +23,7 @@ pub fn write_file() -> StdFunction {
         let expected_types = vec![Type::Str, Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(filepath) = params.get(0) {
+        if let Some(filepath) = params.first() {
             actual_types.push(filepath.borrow().to_type());
 
             if let Some(content) = params.get(1) {

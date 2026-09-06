@@ -6,7 +6,7 @@ use crate::common::errors::CompilerError;
 use crate::{
     backend::llvm::{
         libc_functions::LibcFunctions,
-        llvm_alu::llvm_value::LlvmValue,
+        llvm_alu::llvm_value::{LlvmValue, STR_DATA, STR_REFCOUNT},
         llvm_alu::{LlvmAlu, OverflowPolicy},
     },
     common::{errors::IError, span::Span},
@@ -24,6 +24,73 @@ impl LlvmAlu {
     // String helpers
     // ========================================================================
 
+    /// Allocates a fresh `StrHeader { refcount: 1, data }` around an
+    /// already-heap-allocated `data` C string. Mirrors
+    /// `Compiler::build_str_header`, duplicated here because `LlvmAlu` has
+    /// no access to a `Compiler`.
+    pub(in crate::backend::llvm::llvm_alu) fn wrap_str_header<'ctx>(
+        builder: &Builder<'ctx>,
+        libc: &LibcFunctions<'ctx>,
+        data: PointerValue<'ctx>,
+        span: Span,
+    ) -> Result<PointerValue<'ctx>, Box<dyn IError>> {
+        let context = Self::context(builder);
+        let ptr_type = context.ptr_type(AddressSpace::default());
+        let i64_type = context.i64_type();
+
+        // StrHeader { refcount: i64, data: i8* } - field order matches STR_REFCOUNT/STR_DATA.
+        let header_type = context.struct_type(&[i64_type.into(), ptr_type.into()], false);
+        let header_size = header_type.size_of().expect("StrHeader must have a known size");
+
+        let header_ptr = builder
+            .build_call(libc.malloc_fn, &[header_size.into()], "str.header.malloc")
+            .map_err(|err| Self::map_err(err, span))?
+            .try_as_basic_value()
+            .basic()
+            .expect("malloc should return a value")
+            .into_pointer_value();
+
+        let rc_field = builder
+            .build_struct_gep(header_type, header_ptr, STR_REFCOUNT, "str.rc")
+            .map_err(|err| Self::map_err(err, span))?;
+        builder
+            .build_store(rc_field, i64_type.const_int(1, false))
+            .map_err(|err| Self::map_err(err, span))?;
+
+        let data_field = builder
+            .build_struct_gep(header_type, header_ptr, STR_DATA, "str.data")
+            .map_err(|err| Self::map_err(err, span))?;
+        builder.build_store(data_field, data).map_err(|err| Self::map_err(err, span))?;
+
+        Ok(header_ptr)
+    }
+
+    /// Loads the `data: i8*` field out of a `StrHeader` pointer.
+    pub(in crate::backend::llvm::llvm_alu) fn str_data_ptr<'ctx>(
+        builder: &Builder<'ctx>,
+        header_ptr: PointerValue<'ctx>,
+        span: Span,
+    ) -> Result<PointerValue<'ctx>, Box<dyn IError>> {
+        let context = Self::context(builder);
+        let ptr_type = context.ptr_type(AddressSpace::default());
+        let i64_type = context.i64_type();
+
+        let header_type = context.struct_type(&[i64_type.into(), ptr_type.into()], false);
+
+        let data_field = builder
+            .build_struct_gep(header_type, header_ptr, STR_DATA, "str.data.field")
+            .map_err(|err| Self::map_err(err, span))?;
+
+        let data = builder
+            .build_load(ptr_type, data_field, "str.data.val")
+            .map_err(|err| Self::map_err(err, span))?
+            .into_pointer_value();
+
+        Ok(data)
+    }
+
+    /// Concatenates two strings (given as `StrHeader` pointers) into a
+    /// brand new, independently owned `StrHeader` (refcount 1).
     fn concat_strings<'ctx>(
         &self,
         builder: &Builder<'ctx>,
@@ -32,8 +99,11 @@ impl LlvmAlu {
         right: PointerValue<'ctx>,
         span: Span,
     ) -> Result<LlvmValue<'ctx>, Box<dyn IError>> {
+        let left_data = Self::str_data_ptr(builder, left, span)?;
+        let right_data = Self::str_data_ptr(builder, right, span)?;
+
         let len_l_call = builder
-            .build_call(libc.strlen_fn, &[left.into()], "strlen_l")
+            .build_call(libc.strlen_fn, &[left_data.into()], "strlen_l")
             .map_err(|err| Self::map_err(err, span))?;
 
         let len_l = len_l_call
@@ -43,7 +113,7 @@ impl LlvmAlu {
             .into_int_value();
 
         let len_r_call = builder
-            .build_call(libc.strlen_fn, &[right.into()], "strlen_r")
+            .build_call(libc.strlen_fn, &[right_data.into()], "strlen_r")
             .map_err(|err| Self::map_err(err, span))?;
 
         let len_r = len_r_call
@@ -55,27 +125,18 @@ impl LlvmAlu {
         /*
          * strlen returns size_t.
          *
-         * We also need to protect the addition itself:
+         * We need:
          *
          *     len_l + len_r + 1
          *
-         * can overflow size_t and cause malloc() to allocate a buffer
-         * smaller than the string we subsequently write into it.
+         * and this must not overflow.
          */
         let size_type = len_l.get_type();
-
         let one = size_type.const_int(1, false);
 
         if self.overflow_policy != OverflowPolicy::Ignore {
-            /*
-             * Check:
-             *
-             *     len_l + len_r <= SIZE_MAX - 1
-             *
-             * We can avoid calculating the potentially overflowing sum by
-             * checking the operands individually.
-             */
             let max = size_type.const_all_ones();
+
             let max_minus_one = builder
                 .build_int_sub(max, one, "concat.max_minus_one")
                 .map_err(|err| Self::map_err(err, span))?;
@@ -112,28 +173,35 @@ impl LlvmAlu {
             .and_then(|sum_len| builder.build_int_add(sum_len, one, "concat_total_len"))
             .map_err(|err| Self::map_err(err, span))?;
 
-        let malloc_call = builder
+        /*
+         * Allocate the character buffer and copy both strings into it.
+         */
+        let malloc_data_call = builder
             .build_call(libc.malloc_fn, &[total_len.into()], "concat_buf")
             .map_err(|err| Self::map_err(err, span))?;
 
-        let buf = malloc_call
+        let data = malloc_data_call
             .try_as_basic_value()
             .basic()
             .expect("malloc should return a value")
             .into_pointer_value();
 
         builder
-            .build_call(libc.strcpy_fn, &[buf.into(), left.into()], "strcpy_call")
+            .build_call(libc.strcpy_fn, &[data.into(), left_data.into()], "strcpy_call")
             .map_err(|err| Self::map_err(err, span))?;
 
         builder
-            .build_call(libc.strcat_fn, &[buf.into(), right.into()], "strcat_call")
+            .build_call(libc.strcat_fn, &[data.into(), right_data.into()], "strcat_call")
             .map_err(|err| Self::map_err(err, span))?;
 
-        Ok(LlvmValue::Str(buf))
+        let header_ptr = Self::wrap_str_header(builder, libc, data, span)?;
+
+        Ok(LlvmValue::Str(header_ptr))
     }
 
+    /// Turns a single `char` into a freshly-allocated, headered one-character `Str`.
     fn char_to_string<'ctx>(
+        &self,
         builder: &Builder<'ctx>,
         libc: &LibcFunctions<'ctx>,
         ch: IntValue<'ctx>,
@@ -167,7 +235,26 @@ impl LlvmAlu {
 
         builder.build_store(null_ptr, zero).map_err(|err| Self::map_err(err, span))?;
 
-        Ok(buf)
+        Self::wrap_str_header(builder, libc, buf, span)
+    }
+
+    fn free_temp_str<'ctx>(
+        builder: &Builder<'ctx>,
+        libc: &LibcFunctions<'ctx>,
+        header_ptr: PointerValue<'ctx>,
+        span: Span,
+    ) -> Result<(), Box<dyn IError>> {
+        let data_ptr = Self::str_data_ptr(builder, header_ptr, span)?;
+
+        builder
+            .build_call(libc.free_fn, &[data_ptr.into()], "temp_str.free_data")
+            .map_err(|err| Self::map_err(err, span))?;
+
+        builder
+            .build_call(libc.free_fn, &[header_ptr.into()], "temp_str.free_header")
+            .map_err(|err| Self::map_err(err, span))?;
+
+        Ok(())
     }
 
     // ========================================================================
@@ -221,22 +308,35 @@ impl LlvmAlu {
                 .map_err(|err| Self::map_err(err, span)),
 
             (LlvmValue::Char(l), LlvmValue::Char(r)) => {
-                let left_str = Self::char_to_string(builder, libc, l, span)?;
-                let right_str = Self::char_to_string(builder, libc, r, span)?;
+                let left_str = self.char_to_string(builder, libc, l, span)?;
+                let right_str = self.char_to_string(builder, libc, r, span)?;
 
-                self.concat_strings(builder, libc, left_str, right_str, span)
+                let result = self.concat_strings(builder, libc, left_str, right_str, span)?;
+
+                Self::free_temp_str(builder, libc, left_str, span)?;
+                Self::free_temp_str(builder, libc, right_str, span)?;
+
+                Ok(result)
             }
 
             (LlvmValue::Str(l), LlvmValue::Char(r)) => {
-                let right_str = Self::char_to_string(builder, libc, r, span)?;
+                let right_str = self.char_to_string(builder, libc, r, span)?;
 
-                self.concat_strings(builder, libc, l, right_str, span)
+                let result = self.concat_strings(builder, libc, l, right_str, span)?;
+
+                Self::free_temp_str(builder, libc, right_str, span)?;
+
+                Ok(result)
             }
 
             (LlvmValue::Char(l), LlvmValue::Str(r)) => {
-                let left_str = Self::char_to_string(builder, libc, l, span)?;
+                let left_str = self.char_to_string(builder, libc, l, span)?;
 
-                self.concat_strings(builder, libc, left_str, r, span)
+                let result = self.concat_strings(builder, libc, left_str, r, span)?;
+
+                Self::free_temp_str(builder, libc, left_str, span)?;
+
+                Ok(result)
             }
 
             (LlvmValue::Str(l), LlvmValue::Str(r)) => self.concat_strings(builder, libc, l, r, span),
@@ -508,6 +608,7 @@ impl LlvmAlu {
     // Generic integer overflow checker
     // ========================================================================
 
+    #[allow(clippy::too_many_arguments)]
     fn checked_integer_operation<'ctx>(
         &self,
         builder: &Builder<'ctx>,
@@ -564,6 +665,7 @@ impl LlvmAlu {
      * For add/sub this also makes the implementation very simple and avoids
      * subtle signed-overflow formulas.
      */
+    #[allow(clippy::too_many_arguments)]
     fn build_integer_overflow_condition<'ctx>(
         &self,
         builder: &Builder<'ctx>,

@@ -9,13 +9,11 @@ impl<'a> Interpreter<'a> {
             let this = self.last_result.take();
             match this {
                 Some(v) => Ok(v),
-                None => Err((|| {
-                    Box::new(InterpreterError::at(
+                None => Err(Box::new(InterpreterError::at(
                         ErrorSeverity::HIGH,
                         String::from("No value produced where it is needed."),
                         self.span,
-                    ))
-                })()),
+                    ))),
             }
         }
     }

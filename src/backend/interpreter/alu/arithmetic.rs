@@ -14,7 +14,7 @@ impl ALU {
             None => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Overflow occurred when performing {} on {:?} and {:?}.",
+                    "Overflow occurred when performing {} on {} and {}.",
                     op_name,
                     val1.to_type(),
                     val2.to_type()
@@ -46,7 +46,7 @@ impl ALU {
             _ => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Cannot perform {} between values of type '{:?}' and '{:?}'.",
+                    "Cannot perform {} between values of type '{}' and '{}'.",
                     op_name,
                     val1.to_type(),
                     val2.to_type()
@@ -73,11 +73,7 @@ impl ALU {
             (Value::String(a), Value::Char(b)) => Ok(Value::String(format!("{}{}", a, b))),
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!(
-                    "Cannot perform addition between values of type '{:?}' and '{:?}'.",
-                    a.to_type(),
-                    b.to_type()
-                ),
+                format!("Cannot perform addition between values of type '{}' and '{}'.", a.to_type(), b.to_type()),
                 span,
             )),
         }
@@ -97,7 +93,7 @@ impl ALU {
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Cannot perform subtraction between values of type '{:?}' and '{:?}'.",
+                    "Cannot perform subtraction between values of type '{}' and '{}'.",
                     a.to_type(),
                     b.to_type()
                 ),
@@ -120,7 +116,7 @@ impl ALU {
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Cannot perform multiplication between values of type '{:?}' and '{:?}'.",
+                    "Cannot perform multiplication between values of type '{}' and '{}'.",
                     a.to_type(),
                     b.to_type()
                 ),
@@ -142,11 +138,7 @@ impl ALU {
             (Value::F64(_), Value::F64(_)) => Self::check_float_operation(&val1, &val2, |a, b| a / b, "division", span),
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!(
-                    "Cannot perform division between values of type '{:?}' and '{:?}'.",
-                    a.to_type(),
-                    b.to_type()
-                ),
+                format!("Cannot perform division between values of type '{}' and '{}'.", a.to_type(), b.to_type()),
                 span,
             )),
         }
@@ -164,11 +156,7 @@ impl ALU {
             (Value::U64(a), Value::U64(b)) => Self::check_int_operation(&val1, &val2, || a.checked_rem(*b).map(Value::U64), "modulo", span),
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!(
-                    "Cannot perform modulo between values of type '{:?}' and '{:?}'.",
-                    a.to_type(),
-                    b.to_type()
-                ),
+                format!("Cannot perform modulo between values of type '{}' and '{}'.", a.to_type(), b.to_type()),
                 span,
             )),
         }

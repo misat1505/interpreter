@@ -8,7 +8,7 @@ impl ALU {
         ComputationError::new(
             ErrorSeverity::HIGH,
             format!(
-                "Cannot perform {} between values of type '{:?}' and '{:?}'.",
+                "Cannot perform {} between values of type '{}' and '{}'.",
                 op_name,
                 val1.to_type(),
                 val2.to_type()

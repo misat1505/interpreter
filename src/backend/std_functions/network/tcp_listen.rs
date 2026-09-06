@@ -26,7 +26,7 @@ pub fn tcp_listen() -> StdFunction {
         let expected_types = vec![Type::I64];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(port) = params.get(0) {
+        if let Some(port) = params.first() {
             actual_types.push(port.borrow().to_type());
 
             let port = port.borrow();
@@ -51,7 +51,7 @@ pub fn tcp_listen() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'tcp_listen' expects exactly one argument."),

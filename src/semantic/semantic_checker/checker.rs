@@ -53,8 +53,8 @@ impl<'a> SemanticChecker<'a> {
 
     pub(in crate::semantic::semantic_checker) fn evaluate_binary_op<F>(
         &mut self,
-        lhs: &'a Box<Node<Expression>>,
-        rhs: &'a Box<Node<Expression>>,
+        lhs: &'a Node<Expression>,
+        rhs: &'a Node<Expression>,
         op: F,
     ) -> Result<(), Box<dyn IError>>
     where
@@ -87,11 +87,7 @@ impl<'a> SemanticChecker<'a> {
         Ok(())
     }
 
-    pub(in crate::semantic::semantic_checker) fn evaluate_unary_op<F>(
-        &mut self,
-        value: &'a Box<Node<Expression>>,
-        op: F,
-    ) -> Result<(), Box<dyn IError>>
+    pub(in crate::semantic::semantic_checker) fn evaluate_unary_op<F>(&mut self, value: &'a Node<Expression>, op: F) -> Result<(), Box<dyn IError>>
     where
         F: Fn(Type, Span) -> Result<Type, SemanticCheckerError>,
     {

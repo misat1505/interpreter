@@ -48,7 +48,7 @@ impl<'a> Scope<'a> {
                     Err(ScopeManagerError::new(
                         ErrorSeverity::HIGH,
                         format!(
-                            "Cannot assign '{:?}' to variable '{}' which was previously declared as '{:?}'.",
+                            "Cannot assign '{}' to variable '{}' which was previously declared as '{}'.",
                             new_val_borrow.to_type(),
                             name,
                             prev_val_borrow.to_type()

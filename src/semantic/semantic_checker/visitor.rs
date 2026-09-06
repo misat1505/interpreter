@@ -17,8 +17,8 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             self.visit_statement(statement);
         }
         self.unused_variables_in_last_scope_warn();
-        for (_name, function) in &program.functions {
-            self.stack.push_stack_frame().map_err(|err| Box::new(err));
+        for function in program.functions.values() {
+            self.stack.push_stack_frame().map_err(Box::new);
             self.visit_type(&function.value.return_type)?;
             let raw_return_type = self.read_last_result(function.value.return_type.span)?;
             let resolved_return_type = self.resolve_type_fully_checked(&raw_return_type, function.value.return_type.span)?;
@@ -64,8 +64,8 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             Statement::ForLoop { .. } => self.check_for_loop(statement)?,
             Statement::Switch { .. } => self.check_switch(statement)?,
             Statement::Return { .. } => self.check_return(statement)?,
-            Statement::Break { .. } => self.check_break(statement)?,
-            Statement::Continue { .. } => self.check_continue(statement)?,
+            Statement::Break => self.check_break(statement)?,
+            Statement::Continue => self.check_continue(statement)?,
         }
         Ok(())
     }
@@ -123,21 +123,21 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
         Ok(())
     }
 
-    fn visit_variable(&mut self, variable: &'a String, span: Span) -> Result<(), Box<dyn IError>> {
-        let value = self.stack.get_variable(variable.as_str(), span).map_err(|err| {
+    fn visit_variable(&mut self, variable: &'a str, span: Span) -> Result<(), Box<dyn IError>> {
+        let value = self.stack.get_variable(variable, span).map_err(|err| {
             let error = SemanticCheckerError::at(ErrorSeverity::HIGH, err.message(), span);
             self.errors.push(Box::new(error.clone()));
             Box::new(error) as Box<dyn IError>
         })?;
         self.hovers.push(HoverInfo {
-            contents: format!("```raptor\n{:?} {}\n```", value, variable),
+            contents: format!("```raptor\n{} {}\n```", value, variable),
             span,
         });
         self.last_result = Some(value.clone());
         Ok(())
     }
 
-    fn visit_vector_literal(&mut self, vector: &'a Vec<Box<Node<Expression>>>) -> Result<(), Box<dyn IError>> {
+    fn visit_vector_literal(&mut self, vector: &'a [Box<Node<Expression>>]) -> Result<(), Box<dyn IError>> {
         let mut element_type: Option<Type> = None;
         for expression in vector {
             self.visit_expression(expression)?;
@@ -163,7 +163,7 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
         if let (Some(first), Some(last)) = (vector.first(), vector.last()) {
             let span = Span::new(first.span.start(), last.span.end());
             self.hovers.push(HoverInfo {
-                contents: format!("```raptor\n{:?}\n```", vector_type),
+                contents: format!("```raptor\n{}\n```", vector_type),
                 span,
             });
         }
@@ -229,7 +229,7 @@ impl<'a> SemanticChecker<'a> {
                 let error = SemanticCheckerError::type_mismatch(
                     ErrorSeverity::HIGH,
                     format!(
-                        "Cannot assign a value of type `{:?}` to field `{}` of struct `{}`.",
+                        "Cannot assign a value of type `{}` to field `{}` of struct `{}`.",
                         actual_type, field_name, struct_name
                     ),
                     &expected_type,
@@ -258,7 +258,7 @@ impl<'a> SemanticChecker<'a> {
             }
         }
         self.hovers.push(HoverInfo {
-            contents: format!("```raptor\n{:?}\n```", declared_type),
+            contents: format!("```raptor\n{}\n```", declared_type),
             span: identifier.span,
         });
         self.last_result = Some(declared_type);

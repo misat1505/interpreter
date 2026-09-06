@@ -14,7 +14,7 @@ impl ALU {
 
             val => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform boolean negation on type '{:?}'.", val.to_type()),
+                format!("Cannot perform boolean negation on type '{}'.", val.to_type()),
                 span,
             )),
         }
@@ -62,7 +62,7 @@ impl ALU {
 
             val => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform arithmetic negation on type '{:?}'.", val.to_type()),
+                format!("Cannot perform arithmetic negation on type '{}'.", val.to_type()),
                 span,
             )),
         }

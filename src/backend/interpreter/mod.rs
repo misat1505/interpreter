@@ -1,4 +1,5 @@
 pub mod alu;
+#[allow(clippy::module_inception)]
 pub mod interpreter;
 mod stack;
 

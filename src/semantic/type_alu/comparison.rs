@@ -49,7 +49,7 @@ impl TypeALU {
 
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform {} between values of type '{:?}' and '{:?}'.", op_name, a, b),
+                format!("Cannot perform {} between values of type '{}' and '{}'.", op_name, a, b),
                 span,
             )),
         }
@@ -68,7 +68,7 @@ impl TypeALU {
 
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform {} between values of type '{:?}' and '{:?}'.", op_name, a, b),
+                format!("Cannot perform {} between values of type '{}' and '{}'.", op_name, a, b),
                 span,
             )),
         }

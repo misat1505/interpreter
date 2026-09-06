@@ -68,7 +68,7 @@ fn arithmetic_negate_rejects_unsigned_and_others() {
     ];
     for t in bad {
         let r = TypeALU::arithmetic_negate(t.clone(), Span::default());
-        assert!(r.is_err(), "expected error for {:?}", t);
+        assert!(r.is_err(), "expected error for {}", t);
         let msg = r.err().unwrap().message();
         assert!(msg.starts_with("Cannot perform arithmetic negation on type"), "msg: {}", msg);
     }
@@ -93,7 +93,7 @@ fn boolean_negate_rejects_all_non_bool() {
     ];
     for t in bad {
         let r = TypeALU::boolean_negate(t.clone(), Span::default());
-        assert!(r.is_err(), "expected error for {:?}", t);
+        assert!(r.is_err(), "expected error for {}", t);
         let msg = r.err().unwrap().message();
         assert!(msg.starts_with("Cannot perform boolean negation on type"), "msg: {}", msg);
     }

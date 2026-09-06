@@ -62,7 +62,7 @@ impl<R: BufRead> LazyStreamReader<R> {
     fn try_handle_newline(&mut self) -> Result<Option<char>, Box<dyn Error>> {
         let buffer = self.src.fill_buf()?;
 
-        if let Some(&first_char) = buffer.get(0) {
+        if let Some(&first_char) = buffer.first() {
             if let Some(&second_char) = buffer.get(1) {
                 if first_char == b'\r' {
                     let mut newline_sequence = vec![first_char];
@@ -91,7 +91,7 @@ impl<R: BufRead> LazyStreamReader<R> {
             return Ok(ETX);
         }
 
-        let first_byte = *buffer.get(0).unwrap();
+        let first_byte = *buffer.first().unwrap();
         let char = first_byte as char;
 
         self.src.consume(1);
@@ -127,6 +127,6 @@ impl<R: BufRead> LazyStreamReader<R> {
         let spaces = " ".repeat((self.position().column - 1) as usize);
         let caret_string = format!("{}^", spaces);
 
-        return format!("\nAt line:\n{}{}{}{}", self.current_line, self.current_char, buffer, caret_string);
+        format!("\nAt line:\n{}{}{}{}", self.current_line, self.current_char, buffer, caret_string)
     }
 }

@@ -95,8 +95,8 @@ impl<'a> Interpreter<'a> {
                                     return Err(Box::new(InterpreterError::expected_found(
                                         ErrorSeverity::HIGH,
                                         format!("Cannot assign value to vector '{}'.", identifier.value),
-                                        format!("{:?}", declared_inner.as_ref()),
-                                        format!("{:?}", actual_type),
+                                        format!("{}", declared_inner.as_ref()),
+                                        format!("{}", actual_type),
                                         statement.span,
                                     )));
                                 }
@@ -116,8 +116,8 @@ impl<'a> Interpreter<'a> {
                             return Err(Box::new(InterpreterError::expected_found(
                                 ErrorSeverity::HIGH,
                                 format!("Cannot assign value to variable '{}'.", identifier.value),
-                                format!("{:?}", declared_type),
-                                format!("{:?}", computed_value.to_type()),
+                                format!("{}", declared_type),
+                                format!("{}", computed_value.to_type()),
                                 statement.span,
                             )));
                         }
@@ -147,7 +147,7 @@ impl<'a> Interpreter<'a> {
                                         return Err(Box::new(InterpreterError::expected_found(
                                             ErrorSeverity::HIGH,
                                             format!("Cannot assign value to variable '{}'.", identifier.value),
-                                            format!("{:?}", var_type.value),
+                                            format!("{}", var_type.value),
                                             "empty vector".to_string(),
                                             statement.span,
                                         )));
@@ -172,7 +172,7 @@ impl<'a> Interpreter<'a> {
                                         return Err(Box::new(InterpreterError::at(
                                             ErrorSeverity::HIGH,
                                             format!(
-                                                "Cannot infer type of empty vector. Consider adding a type annotation, e.g. `let {}: {:?} = [];`.",
+                                                "Cannot infer type of empty vector. Consider adding a type annotation, e.g. `let {}: {} = [];`.",
                                                 identifier.value,
                                                 Type::Vector(Box::new(Type::I64))
                                             ),
@@ -192,8 +192,8 @@ impl<'a> Interpreter<'a> {
                             return Err(Box::new(InterpreterError::expected_found(
                                 ErrorSeverity::HIGH,
                                 format!("Cannot assign value to variable '{}'.", identifier.value),
-                                format!("{:?}", var_type.value),
-                                format!("{:?}", resolved_type),
+                                format!("{}", var_type.value),
+                                format!("{}", resolved_type),
                                 statement.span,
                             )));
                         }
@@ -455,8 +455,8 @@ impl<'a> Interpreter<'a> {
         Box::new(InterpreterError::expected_found(
             ErrorSeverity::HIGH,
             format!("Condition in '{}' has to evaluate to a valid boolean.", place),
-            format!("{:?}", Type::Bool),
-            format!("{:?}", value.to_type()),
+            format!("{}", Type::Bool),
+            format!("{}", value.to_type()),
             self.span,
         ))
     }
@@ -464,7 +464,7 @@ impl<'a> Interpreter<'a> {
     pub(in crate::backend::interpreter::interpreter) fn exec_index_assignment(
         &mut self,
         identifier: &'a Node<String>,
-        accessors: &'a Vec<Node<Accessor>>,
+        accessors: &'a [Node<Accessor>],
         value: &'a Node<Expression>,
     ) -> Result<(), Box<dyn IError>> {
         let var_ref = self
@@ -497,7 +497,7 @@ impl<'a> Interpreter<'a> {
                                     ErrorSeverity::HIGH,
                                     String::from("Cannot index into this value."),
                                     String::from("Vector"),
-                                    format!("{:?}", other.to_type()),
+                                    format!("{}", other.to_type()),
                                     index_expr.span,
                                 )));
                             }
@@ -539,7 +539,7 @@ impl<'a> Interpreter<'a> {
                                 ErrorSeverity::HIGH,
                                 String::from("Cannot access a field on this value."),
                                 String::from("Struct"),
-                                format!("{:?}", other.to_type()),
+                                format!("{}", other.to_type()),
                                 field.span,
                             )));
                         }
@@ -586,7 +586,7 @@ impl<'a> Interpreter<'a> {
                                     ErrorSeverity::HIGH,
                                     String::from("Can only assign a `char` into a string index."),
                                     String::from("Char"),
-                                    format!("{:?}", other.to_type()),
+                                    format!("{}", other.to_type()),
                                     value.span,
                                 )));
                             }
@@ -619,7 +619,7 @@ impl<'a> Interpreter<'a> {
                         ErrorSeverity::HIGH,
                         String::from("Cannot index into this value."),
                         String::from("Vector or Str"),
-                        format!("{:?}", other.to_type()),
+                        format!("{}", other.to_type()),
                         index_expr.span,
                     ))),
                 }
@@ -649,7 +649,7 @@ impl<'a> Interpreter<'a> {
                         ErrorSeverity::HIGH,
                         String::from("Cannot access a field on this value."),
                         String::from("Struct"),
-                        format!("{:?}", other.to_type()),
+                        format!("{}", other.to_type()),
                         field.span,
                     ))),
                 }
@@ -683,7 +683,7 @@ impl<'a> Interpreter<'a> {
                             ErrorSeverity::HIGH,
                             String::from("Cannot index into this value."),
                             String::from("Vector"),
-                            format!("{:?}", other.to_type()),
+                            format!("{}", other.to_type()),
                             collection.span,
                         )));
                     }
@@ -726,7 +726,7 @@ impl<'a> Interpreter<'a> {
                         ErrorSeverity::HIGH,
                         String::from("Cannot access a field on this value."),
                         String::from("Struct"),
-                        format!("{:?}", other.to_type()),
+                        format!("{}", other.to_type()),
                         field.span,
                     ))),
                 }

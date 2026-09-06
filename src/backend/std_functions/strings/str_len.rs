@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, vec};
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -23,7 +23,7 @@ pub fn str_len() -> StdFunction {
         let expected_types = vec![Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(text) = params.get(0) {
+        if let Some(text) = params.first() {
             actual_types.push(text.borrow().to_type());
 
             let text = text.borrow();
@@ -40,7 +40,7 @@ pub fn str_len() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'str_len' expects exactly one argument."),
@@ -56,26 +56,29 @@ pub fn str_len() -> StdFunction {
             other => {
                 return Err(Box::new(CompilerError::at(
                     ErrorSeverity::HIGH,
-                    format!("'str_len' expects a string, got '{:?}'.", other.to_type()),
+                    format!("'str_len' expects a string, got '{}'.", other.to_type()),
                     span,
                 )))
             }
         };
-        let owned_ptr = compiler.build_string_copy(str_ptr, span)?;
+
+        // Just peeking at the length - read the header's data pointer
+        // directly, no need to copy or retain/release anything.
+        let data = compiler.str_data_ptr(str_ptr, span)?;
 
         let strlen_fn = compiler.libc().strlen_fn;
         let length = compiler
             .builder()
-            .build_call(strlen_fn, &[owned_ptr.into()], "str.len")
+            .build_call(strlen_fn, &[data.into()], "str.len")
             .map_err(err)?
             .try_as_basic_value()
             .basic()
             .expect("strlen should return a value")
             .into_int_value();
 
-        let free_fn = compiler.libc().free_fn;
-
-        compiler.builder().build_call(free_fn, &[owned_ptr.into()], "str_len.free").map_err(err)?;
+        if Compiler::expr_needs_release(&arg.value.value.value) {
+            compiler.release_value(&str_value, span)?;
+        }
 
         compiler.set_last_value(LlvmValue::I64(length));
 

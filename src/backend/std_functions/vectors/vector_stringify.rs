@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, vec};
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -66,7 +66,7 @@ pub fn vector_stringify() -> StdFunction {
         let expected_types = vec![Type::Vector(Box::new(Type::Void))];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(vector) = params.get(0) {
+        if let Some(vector) = params.first() {
             actual_types.push(vector.borrow().to_type());
 
             let vector = vector.borrow();
@@ -82,12 +82,12 @@ pub fn vector_stringify() -> StdFunction {
 
     let type_check: fn(&[Type]) -> Result<Type, String> = |arg_types: &[Type]| match arg_types {
         [Type::Vector(_)] => Ok(Type::Str),
-        [other] => Err(format!("vector_stringify expected a vector, but got '{:?}'.", other)),
+        [other] => Err(format!("vector_stringify expected a vector, but got '{}'.", other)),
         _ => Err(String::from("vector_stringify expects exactly 1 argument.")),
     };
 
     let compile: LlvmCompileFn = |compiler, arguments, span| {
-        let vector_arg = arguments.get(0).ok_or_else(|| {
+        let vector_arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'vector_stringify' expects exactly one argument."),
@@ -98,18 +98,23 @@ pub fn vector_stringify() -> StdFunction {
         compiler.visit_expression(&vector_arg.value.value)?;
         let vector_value = compiler.read_last_value()?;
 
-        let (vector_ptr, inner_type) = match vector_value {
-            LlvmValue::Vector(ptr, inner) => (ptr, *inner),
+        let (vector_ptr, inner_type) = match &vector_value {
+            LlvmValue::Vector(ptr, inner) => (*ptr, (**inner).clone()),
             other => {
                 return Err(Box::new(CompilerError::at(
                     ErrorSeverity::HIGH,
-                    format!("'vector_stringify' expects a vector, got '{:?}'.", other.to_type()),
+                    format!("'vector_stringify' expects a vector, got '{}'.", other.to_type()),
                     span,
                 )))
             }
         };
 
         let result = compiler.build_vector_to_string(vector_ptr, &inner_type, span)?;
+
+        if Compiler::expr_needs_release(&vector_arg.value.value.value) {
+            compiler.release_value(&vector_value, span)?;
+        }
+
         compiler.set_last_value(LlvmValue::Str(result));
 
         Ok(())

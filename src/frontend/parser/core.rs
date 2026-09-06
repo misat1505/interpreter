@@ -54,7 +54,7 @@ impl<L: ILexer> Parser<L> {
         Err(Box::new(ParserError::expected_found(
             ErrorSeverity::HIGH,
             "Unexpected token".to_string(),
-            format!("{:?}", category),
+            format!("{}", category),
             Self::token_text(&current_token),
             current_token.span,
         )))
@@ -81,7 +81,7 @@ impl<L: ILexer> Parser<L> {
             TokenValue::I64(value) => value.to_string(),
             TokenValue::String(value) => value.clone(),
             TokenValue::Char(value) => value.to_string(),
-            TokenValue::Null => format!("{:?}", token.category),
+            TokenValue::Null => format!("{}", token.category),
         }
     }
 }

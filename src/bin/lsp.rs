@@ -111,12 +111,10 @@ fn std_function_completions() -> Vec<CompletionItem> {
         "tcp_read",
         "tcp_write",
         "str_len",
-        "str_free",
         "sleep_ms",
         "vector_push",
         "vector_size",
         "vector_stringify",
-        "vector_free",
     ];
 
     functions

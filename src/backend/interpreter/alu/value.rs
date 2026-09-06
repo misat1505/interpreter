@@ -1,4 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, vec};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt::{self, Display},
+    rc::Rc,
+    vec,
+};
 
 use crate::common::{
     errors::{ComputationError, ErrorSeverity},
@@ -33,6 +39,50 @@ pub enum Value {
         fields_types: Rc<HashMap<String, Type>>,
         fields: Rc<RefCell<HashMap<String, Rc<RefCell<Value>>>>>,
     },
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::I8(value) => write!(f, "{value}"),
+            Value::I16(value) => write!(f, "{value}"),
+            Value::I32(value) => write!(f, "{value}"),
+            Value::I64(value) => write!(f, "{value}"),
+            Value::U8(value) => write!(f, "{value}"),
+            Value::U16(value) => write!(f, "{value}"),
+            Value::U32(value) => write!(f, "{value}"),
+            Value::U64(value) => write!(f, "{value}"),
+            Value::F64(value) => write!(f, "{value}"),
+            Value::String(value) => write!(f, "{value}"),
+            Value::Char(value) => write!(f, "{value}"),
+            Value::Bool(value) => write!(f, "{value}"),
+            Value::Vector { values, .. } => {
+                let values = values.borrow();
+                write!(f, "[")?;
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", value.borrow())?;
+                }
+                write!(f, "]")
+            }
+            Value::Struct { identifier, fields, .. } => {
+                let fields = fields.borrow();
+                write!(f, "{identifier} {{")?;
+                let mut entries: Vec<_> = fields.iter().collect();
+                entries.sort_by_key(|(name, _)| *name);
+
+                for (index, (name, value)) in entries.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{name}: {}", value.borrow())?;
+                }
+                write!(f, "}}")
+            }
+        }
+    }
 }
 
 impl Value {
@@ -75,7 +125,7 @@ impl Value {
 
             other => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot create default value for type '{:?}'.", other),
+                format!("Cannot create default value for type '{}'.", other),
                 span,
             )),
         }

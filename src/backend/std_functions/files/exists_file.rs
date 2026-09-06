@@ -1,9 +1,11 @@
 use std::{cell::RefCell, path::Path, rc::Rc, vec};
 
+use inkwell::AddressSpace;
+
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -22,7 +24,7 @@ pub fn exists_file() -> StdFunction {
         let expected_types = vec![Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(filepath) = params.get(0) {
+        if let Some(filepath) = params.first() {
             actual_types.push(filepath.borrow().to_type());
             let filepath = filepath.borrow();
 
@@ -39,9 +41,9 @@ pub fn exists_file() -> StdFunction {
     };
 
     let compile: LlvmCompileFn = |compiler, arguments, span| {
-        let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
+        let err = |err: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'exists_file' expects exactly one argument."),
@@ -50,16 +52,44 @@ pub fn exists_file() -> StdFunction {
         })?;
 
         compiler.visit_expression(&arg.value.value)?;
-        let path_ptr = compiler.read_last_value()?.into_str_value(span)?;
-        let owned_ptr = compiler.build_string_copy(path_ptr, span)?;
+        let path_value = compiler.read_last_value()?;
 
-        let context = compiler.context();
-        let i32_type = context.i32_type();
+        let path_ptr = match path_value {
+            LlvmValue::Str(ptr) => {
+                let i8_type = compiler.context().i8_type();
+                let i8_ptr_type = compiler.context().ptr_type(AddressSpace::default());
 
+                let data_field = unsafe {
+                    compiler
+                        .builder()
+                        .build_gep(i8_type, ptr, &[compiler.context().i64_type().const_int(8, false)], "str.data.field")
+                }
+                .map_err(err)?;
+
+                let data = compiler
+                    .builder()
+                    .build_load(i8_ptr_type, data_field, "str.data")
+                    .map_err(err)?
+                    .into_pointer_value();
+
+                data
+            }
+
+            other => {
+                return Err(Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("'exists_file' expects a string, got '{}'.", other.to_type()),
+                    span,
+                )));
+            }
+        };
+
+        let i32_type = compiler.context().i32_type();
         let access_fn = compiler.libc().access_fn;
+
         let result = compiler
             .builder()
-            .build_call(access_fn, &[owned_ptr.into(), i32_type.const_int(0, false).into()], "access.call")
+            .build_call(access_fn, &[path_ptr.into(), i32_type.const_int(0, false).into()], "access.call")
             .map_err(err)?
             .try_as_basic_value()
             .basic()
@@ -71,11 +101,12 @@ pub fn exists_file() -> StdFunction {
             .build_int_compare(inkwell::IntPredicate::EQ, result, i32_type.const_int(0, false), "access.exists")
             .map_err(err)?;
 
-        let free_fn = compiler.libc().free_fn;
-
-        compiler.builder().build_call(free_fn, &[owned_ptr.into()], "free.path").map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&arg.value.value.value) {
+            compiler.release_value(&path_value, arg.value.value.span)?;
+        }
 
         compiler.set_last_value(LlvmValue::Bool(exists));
+
         Ok(())
     };
 

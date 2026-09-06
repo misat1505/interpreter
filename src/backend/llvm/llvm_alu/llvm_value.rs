@@ -22,13 +22,36 @@ pub enum LlvmValue<'ctx> {
     U64(IntValue<'ctx>),
 
     F64(FloatValue<'ctx>),
+    /// Pointer to a `StrHeader { refcount: i64, data: i8* }`. Never a raw
+    /// `i8*` into character data directly - always go through
+    /// `str_header_type` field accessors to reach the character buffer.
     Str(PointerValue<'ctx>),
     Char(IntValue<'ctx>),
     Bool(IntValue<'ctx>),
 
+    /// Pointer to a `VecHeader { refcount: i64, data: T*, length: i64, capacity: i64 }`.
     Vector(PointerValue<'ctx>, Box<Type>),
+    /// Pointer to the struct's fields, followed by a trailing `refcount: i64` field.
     Struct(PointerValue<'ctx>, Box<Type>),
 }
+
+// ============================================================================
+// Field indices for the heap object headers used by the refcounting runtime.
+// ============================================================================
+
+/// Field index of the `refcount: i64` field inside a `StrHeader`.
+pub const STR_REFCOUNT: u32 = 0;
+/// Field index of the `data: i8*` field inside a `StrHeader`.
+pub const STR_DATA: u32 = 1;
+
+/// Field index of the `refcount: i64` field inside a `VecHeader`.
+pub const VEC_REFCOUNT: u32 = 0;
+/// Field index of the `data: T*` field inside a `VecHeader`.
+pub const VEC_DATA: u32 = 1;
+/// Field index of the `length: i64` field inside a `VecHeader`.
+pub const VEC_LENGTH: u32 = 2;
+/// Field index of the `capacity: i64` field inside a `VecHeader`.
+pub const VEC_CAPACITY: u32 = 3;
 
 impl<'ctx> LlvmValue<'ctx> {
     pub fn to_type(&self) -> Type {
@@ -51,6 +74,12 @@ impl<'ctx> LlvmValue<'ctx> {
             LlvmValue::Vector(_, inner) => Type::Vector(inner.clone()),
             LlvmValue::Struct(_, ty) => (**ty).clone(),
         }
+    }
+
+    /// Whether this value is a heap object managed by the refcounting
+    /// runtime (i.e. `retain_value`/`release_value` do something for it).
+    pub fn is_refcounted(&self) -> bool {
+        matches!(self, LlvmValue::Str(_) | LlvmValue::Vector(_, _) | LlvmValue::Struct(_, _))
     }
 
     pub fn as_basic_value_enum(&self) -> BasicValueEnum<'ctx> {
@@ -81,7 +110,7 @@ impl<'ctx> LlvmValue<'ctx> {
 
             other => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Expected a boolean condition, got '{:?}'.", other.to_type()),
+                format!("Expected a boolean condition, got '{}'.", other.to_type()),
                 span,
             ))),
         }
@@ -139,11 +168,38 @@ impl<'ctx> LlvmValue<'ctx> {
         }
     }
 
+    /// `VecHeader { refcount: i64, data: T*, length: i64, capacity: i64 }`.
+    ///
+    /// Field order matches the `VEC_*` index constants above.
     pub fn vector_struct_type(context: &'ctx Context) -> StructType<'ctx> {
         let ptr_type = context.ptr_type(AddressSpace::default());
         let i64_type = context.i64_type();
 
-        context.struct_type(&[ptr_type.into(), i64_type.into(), i64_type.into()], false)
+        context.struct_type(
+            &[
+                i64_type.into(), // refcount
+                ptr_type.into(), // data
+                i64_type.into(), // length
+                i64_type.into(), // capacity
+            ],
+            false,
+        )
+    }
+
+    /// `StrHeader { refcount: i64, data: i8* }`.
+    ///
+    /// Field order matches the `STR_*` index constants above.
+    pub fn str_header_type(context: &'ctx Context) -> StructType<'ctx> {
+        let ptr_type = context.ptr_type(AddressSpace::default());
+        let i64_type = context.i64_type();
+
+        context.struct_type(
+            &[
+                i64_type.into(), // refcount
+                ptr_type.into(), // data
+            ],
+            false,
+        )
     }
 
     pub fn element_byte_size(inner_type: &Type, i64_type: IntType<'ctx>, span: Span) -> Result<IntValue<'ctx>, Box<dyn IError>> {
@@ -168,7 +224,7 @@ impl<'ctx> LlvmValue<'ctx> {
             other => {
                 return Err(Box::new(CompilerError::new(
                     ErrorSeverity::HIGH,
-                    format!("Compiling vectors of type '{:?}' is not yet supported. 6", other),
+                    format!("Compiling vectors of type '{}' is not yet supported. 6", other),
                     span,
                 )))
             }
@@ -183,7 +239,7 @@ impl<'ctx> LlvmValue<'ctx> {
 
             other => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Expected an i64 index, got '{:?}'.", other.to_type()),
+                format!("Expected an i64 index, got '{}'.", other.to_type()),
                 span,
             ))),
         }
@@ -195,7 +251,7 @@ impl<'ctx> LlvmValue<'ctx> {
 
             other => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Expected a string, got '{:?}'.", other.to_type()),
+                format!("Expected a string, got '{}'.", other.to_type()),
                 span,
             ))),
         }
@@ -221,7 +277,7 @@ impl<'ctx> LlvmValue<'ctx> {
 
             other => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Expected a char, got '{:?}'.", other.to_type()),
+                format!("Expected a char, got '{}'.", other.to_type()),
                 span,
             ))),
         }

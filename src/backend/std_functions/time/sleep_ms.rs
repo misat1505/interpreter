@@ -22,7 +22,7 @@ pub fn sleep_ms() -> StdFunction {
         let expected_types = vec![Type::I64];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(millis) = params.get(0) {
+        if let Some(millis) = params.first() {
             actual_types.push(millis.borrow().to_type());
 
             let millis = millis.borrow();
@@ -44,7 +44,7 @@ pub fn sleep_ms() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'sleep_ms' expects exactly one argument."),

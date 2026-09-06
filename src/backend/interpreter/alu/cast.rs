@@ -205,7 +205,7 @@ impl ALU {
             // Unsupported cast
             (value, target_type) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot cast '{:?}' to '{:?}'.", value, target_type),
+                format!("Cannot cast '{}' to '{}'.", value, target_type),
                 span,
             )),
         }
@@ -280,7 +280,7 @@ impl ALU {
     }
 
     fn invalid_cast<T: std::fmt::Display>(value: T, target_type: Type, span: Span) -> ComputationError {
-        ComputationError::new(ErrorSeverity::HIGH, format!("Cannot cast '{}' to '{:?}'.", value, target_type), span)
+        ComputationError::new(ErrorSeverity::HIGH, format!("Cannot cast '{}' to '{}'.", value, target_type), span)
     }
 
     fn invalid_string_cast(value: &str, target_type: &str, span: Span) -> ComputationError {

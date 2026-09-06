@@ -1,9 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, net::TcpStream, rc::Rc, vec};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, vec};
+
+use inkwell::AddressSpace;
 
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::{
             network::state::{next_handle, STREAMS},
             std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
@@ -26,7 +28,7 @@ pub fn tcp_connect() -> StdFunction {
         let expected_types = vec![Type::Str, Type::I64];
         let mut actual_types: Vec<Type> = vec![];
 
-        let host_val = params.get(0);
+        let host_val = params.first();
         let port_val = params.get(1);
 
         if let (Some(host), Some(port)) = (host_val, port_val) {
@@ -37,7 +39,7 @@ pub fn tcp_connect() -> StdFunction {
             let port = port.borrow();
 
             match (&*host, &*port) {
-                (Value::String(h), Value::I64(p)) => match TcpStream::connect(format!("{}:{}", h, p)) {
+                (Value::String(h), Value::I64(p)) => match std::net::TcpStream::connect(format!("{}:{}", h, p)) {
                     Ok(stream) => {
                         let handle = next_handle();
                         STREAMS.lock().unwrap().get_or_insert_with(HashMap::new).insert(handle, stream);
@@ -55,13 +57,14 @@ pub fn tcp_connect() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let host_arg = arguments.get(0).ok_or_else(|| {
+        let host_arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'tcp_connect' expects exactly two arguments (host, port)."),
                 span,
             )) as Box<dyn IError>
         })?;
+
         let port_arg = arguments.get(1).ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
@@ -71,8 +74,34 @@ pub fn tcp_connect() -> StdFunction {
         })?;
 
         compiler.visit_expression(&host_arg.value.value)?;
-        let host_ptr = compiler.read_last_value()?.into_str_value(span)?;
-        let owned_ptr = compiler.build_string_copy(host_ptr, span)?;
+        let host_value = compiler.read_last_value()?;
+
+        let host_ptr = match &host_value {
+            LlvmValue::Str(ptr) => {
+                let i8_type = compiler.context().i8_type();
+                let i8_ptr_type = compiler.context().ptr_type(AddressSpace::default());
+
+                let data_field = unsafe {
+                    compiler
+                        .builder()
+                        .build_gep(i8_type, *ptr, &[compiler.context().i64_type().const_int(8, false)], "host.data.field")
+                }
+                .map_err(err)?;
+
+                compiler
+                    .builder()
+                    .build_load(i8_ptr_type, data_field, "host.data")
+                    .map_err(err)?
+                    .into_pointer_value()
+            }
+            other => {
+                return Err(Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("'tcp_connect' expects a string host, got '{}'.", other.to_type()),
+                    span,
+                )));
+            }
+        };
 
         compiler.visit_expression(&port_arg.value.value)?;
         let port = compiler.read_last_value()?.into_i64_value(span)?;
@@ -83,8 +112,8 @@ pub fn tcp_connect() -> StdFunction {
         let i8_type = context.i8_type();
         let i64_type = context.i64_type();
 
-        // socket(AF_INET=2, SOCK_STREAM=1, 0)
         let socket_fn = compiler.libc().socket_fn;
+
         let fd = compiler
             .builder()
             .build_call(
@@ -103,19 +132,23 @@ pub fn tcp_connect() -> StdFunction {
             .into_int_value();
 
         let sockaddr_type = context.struct_type(&[i16_type.into(), i16_type.into(), i32_type.into(), i8_type.array_type(8).into()], false);
+
         let sockaddr_ptr = compiler.builder().build_alloca(sockaddr_type, "sockaddr").map_err(err)?;
 
         let family_field = compiler
             .builder()
             .build_struct_gep(sockaddr_type, sockaddr_ptr, 0, "sockaddr.family")
             .map_err(err)?;
-        compiler.builder().build_store(family_field, i16_type.const_int(2, false)).map_err(err)?; // AF_INET
+
+        compiler.builder().build_store(family_field, i16_type.const_int(2, false)).map_err(err)?;
 
         let port_i32 = compiler.builder().build_int_truncate(port, i32_type, "port.i32").map_err(err)?;
+
         let port_lo = compiler
             .builder()
             .build_and(port_i32, i32_type.const_int(0xFF, false), "port.lo")
             .map_err(err)?;
+
         let port_hi = compiler
             .builder()
             .build_right_shift(
@@ -128,6 +161,7 @@ pub fn tcp_connect() -> StdFunction {
                 "port.hi",
             )
             .map_err(err)?;
+
         let port_be = compiler
             .builder()
             .build_or(
@@ -139,27 +173,31 @@ pub fn tcp_connect() -> StdFunction {
                 "port.be",
             )
             .map_err(err)?;
+
         let port_be_i16 = compiler.builder().build_int_truncate(port_be, i16_type, "port.be.i16").map_err(err)?;
+
         let port_field = compiler
             .builder()
             .build_struct_gep(sockaddr_type, sockaddr_ptr, 1, "sockaddr.port")
             .map_err(err)?;
+
         compiler.builder().build_store(port_field, port_be_i16).map_err(err)?;
 
-        // host resolve: "localhost" -> "127.0.0.1", otherwise A.B.C.D
         let localhost_lit = compiler
             .builder()
             .build_global_string_ptr("localhost", "tcp_connect.localhost.lit")
             .map_err(err)?;
+
         let loopback_lit = compiler
             .builder()
             .build_global_string_ptr("127.0.0.1", "tcp_connect.loopback.lit")
             .map_err(err)?;
 
         let strcmp_fn = compiler.libc().strcmp_fn;
+
         let cmp = compiler
             .builder()
-            .build_call(strcmp_fn, &[owned_ptr.into(), localhost_lit.as_pointer_value().into()], "host.cmp")
+            .build_call(strcmp_fn, &[host_ptr.into(), localhost_lit.as_pointer_value().into()], "host.cmp")
             .map_err(err)?
             .try_as_basic_value()
             .basic()
@@ -171,16 +209,17 @@ pub fn tcp_connect() -> StdFunction {
             .build_int_compare(inkwell::IntPredicate::EQ, cmp, i32_type.const_zero(), "is.localhost")
             .map_err(err)?;
 
-        let resolved_owned_ptr = compiler
+        let resolved_host = compiler
             .builder()
-            .build_select(is_localhost, loopback_lit.as_pointer_value(), owned_ptr, "resolved.host")
+            .build_select(is_localhost, loopback_lit.as_pointer_value(), host_ptr, "resolved.host")
             .map_err(err)?
             .into_pointer_value();
 
         let inet_addr_fn = compiler.libc().inet_addr_fn;
+
         let addr_be = compiler
             .builder()
-            .build_call(inet_addr_fn, &[resolved_owned_ptr.into()], "inet_addr.call")
+            .build_call(inet_addr_fn, &[resolved_host.into()], "inet_addr.call")
             .map_err(err)?
             .try_as_basic_value()
             .basic()
@@ -191,19 +230,21 @@ pub fn tcp_connect() -> StdFunction {
             .builder()
             .build_struct_gep(sockaddr_type, sockaddr_ptr, 2, "sockaddr.addr")
             .map_err(err)?;
+
         compiler.builder().build_store(addr_field, addr_be).map_err(err)?;
 
         let zero_field = compiler
             .builder()
             .build_struct_gep(sockaddr_type, sockaddr_ptr, 3, "sockaddr.zero")
             .map_err(err)?;
+
         compiler
             .builder()
             .build_store(zero_field, i8_type.array_type(8).const_zero())
             .map_err(err)?;
 
-        // connect(fd, &sockaddr, 16)
         let connect_fn = compiler.libc().connect_fn;
+
         let connect_result = compiler
             .builder()
             .build_call(
@@ -238,18 +279,17 @@ pub fn tcp_connect() -> StdFunction {
             )) as Box<dyn IError>
         })?;
 
-        let close_block = compiler.context().append_basic_block(current_fn, "tcp_connect.close_on_error");
+        let close_block = context.append_basic_block(current_fn, "tcp_connect.close_on_error");
 
-        let free_block = compiler.context().append_basic_block(current_fn, "tcp_connect.free_host");
+        let release_block = context.append_basic_block(current_fn, "tcp_connect.release_host");
 
-        let continue_block = compiler.context().append_basic_block(current_fn, "tcp_connect.continue");
+        let continue_block = context.append_basic_block(current_fn, "tcp_connect.continue");
 
         compiler
             .builder()
-            .build_conditional_branch(is_error, close_block, free_block)
+            .build_conditional_branch(is_error, close_block, release_block)
             .map_err(err)?;
 
-        // connect() failed -> close socket
         compiler.builder().position_at_end(close_block);
 
         let close_fn = compiler.libc().close_fn;
@@ -259,19 +299,13 @@ pub fn tcp_connect() -> StdFunction {
             .build_call(close_fn, &[fd.into()], "tcp_connect.close_on_error.call")
             .map_err(err)?;
 
-        compiler.builder().build_unconditional_branch(free_block).map_err(err)?;
+        compiler.builder().build_unconditional_branch(release_block).map_err(err)?;
 
-        // Both success and error paths arrive here.
-        // owned_ptr is a temporary string copy created because
-        // tcp_connect takes its string argument by value.
-        compiler.builder().position_at_end(free_block);
+        compiler.builder().position_at_end(release_block);
 
-        let free_fn = compiler.libc().free_fn;
-
-        compiler
-            .builder()
-            .build_call(free_fn, &[owned_ptr.into()], "tcp_connect.free_host")
-            .map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&host_arg.value.value.value) {
+            compiler.release_value(&host_value, host_arg.value.value.span)?;
+        }
 
         compiler.builder().build_unconditional_branch(continue_block).map_err(err)?;
 

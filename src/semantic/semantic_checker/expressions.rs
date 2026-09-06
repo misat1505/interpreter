@@ -29,7 +29,7 @@ impl<'a> SemanticChecker<'a> {
             }
         };
         self.hovers.push(HoverInfo {
-            contents: format!("```raptor\n{:?} {}\n```", current_type, identifier.value),
+            contents: format!("```raptor\n{} {}\n```", current_type, identifier.value),
             span: identifier.span,
         });
         for accessor in accessors {
@@ -56,7 +56,7 @@ impl<'a> SemanticChecker<'a> {
                         other => {
                             self.errors.push(Box::new(SemanticCheckerError::at(
                                 ErrorSeverity::HIGH,
-                                format!("Cannot index into a value of type `{:?}`.", other),
+                                format!("Cannot index into a value of type `{}`.", other),
                                 index_expr.span,
                             )));
                             return;
@@ -71,7 +71,7 @@ impl<'a> SemanticChecker<'a> {
                     else {
                         self.errors.push(Box::new(SemanticCheckerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Cannot access field `{}` on a value of type `{:?}`.", field.value, current_type),
+                            format!("Cannot access field `{}` on a value of type `{}`.", field.value, current_type),
                             field.span,
                         )));
                         return;
@@ -89,7 +89,7 @@ impl<'a> SemanticChecker<'a> {
                         Err(_) => return,
                     };
                     self.hovers.push(HoverInfo {
-                        contents: format!("```raptor\n{:?} {}\n```", current_type, field.value),
+                        contents: format!("```raptor\n{} {}\n```", current_type, field.value),
                         span: field.span,
                     });
                 }
@@ -107,10 +107,7 @@ impl<'a> SemanticChecker<'a> {
         if !compatible {
             self.errors.push(Box::new(SemanticCheckerError::type_mismatch(
                 ErrorSeverity::HIGH,
-                format!(
-                    "Cannot assign a value of type `{:?}` to a target of type `{:?}`.",
-                    actual_type, current_type
-                ),
+                format!("Cannot assign a value of type `{}` to a target of type `{}`.", actual_type, current_type),
                 &current_type,
                 &actual_type,
                 span,
@@ -119,12 +116,9 @@ impl<'a> SemanticChecker<'a> {
     }
 
     pub(in crate::semantic::semantic_checker) fn check_expression(&mut self, expression: &'a Node<Expression>) -> Result<(), Box<dyn IError>> {
-        match &expression.value {
-            Expression::FunctionCall { .. } => {
-                self.check_function_call(FunctionCallType::Expression(expression));
-                return Ok(());
-            }
-            _ => {}
+        if let Expression::FunctionCall { .. } = &expression.value {
+            self.check_function_call(FunctionCallType::Expression(expression));
+            return Ok(());
         }
         match &expression.value {
             Expression::Alternative(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, TypeALU::alternative)?,
@@ -182,7 +176,7 @@ impl<'a> SemanticChecker<'a> {
                     (Ok(other), Ok(Type::I64)) => {
                         self.errors.push(Box::new(SemanticCheckerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Cannot index into a value of type `{:?}`.", other),
+                            format!("Cannot index into a value of type `{}`.", other),
                             expression.span,
                         )));
                         self.last_result = None;
@@ -212,7 +206,7 @@ impl<'a> SemanticChecker<'a> {
                 let Type::Struct { identifier, fields } = &instance_type else {
                     self.errors.push(Box::new(SemanticCheckerError::at(
                         ErrorSeverity::HIGH,
-                        format!("Cannot access field `{}` on a value of type `{:?}`.", field.value, instance_type),
+                        format!("Cannot access field `{}` on a value of type `{}`.", field.value, instance_type),
                         expression.span,
                     )));
                     self.last_result = None;
@@ -232,7 +226,7 @@ impl<'a> SemanticChecker<'a> {
                     return Ok(());
                 };
                 self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{:?} {}\n```", field_type, field.value),
+                    contents: format!("```raptor\n{} {}\n```", field_type, field.value),
                     span: field.span,
                 });
                 self.last_result = Some(field_type);

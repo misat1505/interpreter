@@ -13,6 +13,8 @@ use crate::{
 };
 
 impl LlvmAlu {
+    /// Compares two `StrHeader` pointers by their character data (`strcmp`
+    /// on the underlying C strings, not the header pointers themselves).
     pub(in crate::backend::llvm::llvm_alu) fn strcmp<'ctx>(
         builder: &Builder<'ctx>,
         libc: &LibcFunctions<'ctx>,
@@ -20,8 +22,31 @@ impl LlvmAlu {
         right: PointerValue<'ctx>,
         span: Span,
     ) -> Result<IntValue<'ctx>, Box<dyn IError>> {
+        let context = Self::context(builder);
+        let ptr_type = context.ptr_type(inkwell::AddressSpace::default());
+        let i64_type = context.i64_type();
+
+        // StrHeader { refcount: i64, data: i8* }
+        let header_type = context.struct_type(&[i64_type.into(), ptr_type.into()], false);
+
+        let left_data_field = builder
+            .build_struct_gep(header_type, left, crate::backend::llvm::llvm_alu::llvm_value::STR_DATA, "strcmp.left.data")
+            .map_err(|err| Self::map_err(err, span))?;
+        let left_data = builder
+            .build_load(ptr_type, left_data_field, "strcmp.left.data.val")
+            .map_err(|err| Self::map_err(err, span))?
+            .into_pointer_value();
+
+        let right_data_field = builder
+            .build_struct_gep(header_type, right, crate::backend::llvm::llvm_alu::llvm_value::STR_DATA, "strcmp.right.data")
+            .map_err(|err| Self::map_err(err, span))?;
+        let right_data = builder
+            .build_load(ptr_type, right_data_field, "strcmp.right.data.val")
+            .map_err(|err| Self::map_err(err, span))?
+            .into_pointer_value();
+
         let call = builder
-            .build_call(libc.strcmp_fn, &[left.into(), right.into()], "strcmp")
+            .build_call(libc.strcmp_fn, &[left_data.into(), right_data.into()], "strcmp")
             .map_err(|err| Self::map_err(err, span))?;
 
         Ok(call.try_as_basic_value().basic().expect("strcmp should return a value").into_int_value())

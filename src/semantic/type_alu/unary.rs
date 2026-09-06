@@ -14,7 +14,7 @@ impl TypeALU {
 
             t => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform boolean negation on type '{:?}'.", t),
+                format!("Cannot perform boolean negation on type '{}'.", t),
                 span,
             )),
         }
@@ -30,7 +30,7 @@ impl TypeALU {
 
             t => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform arithmetic negation on type '{:?}'.", t),
+                format!("Cannot perform arithmetic negation on type '{}'.", t),
                 span,
             )),
         }

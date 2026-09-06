@@ -31,7 +31,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         let llvm_type = LlvmValue::type_to_basic_type_enum(&resolved_type, self.context).ok_or_else(|| {
                             Box::new(CompilerError::at(
                                 ErrorSeverity::HIGH,
-                                format!("Compiling parameters of type '{:?}' is not yet supported.", resolved_type),
+                                format!("Compiling parameters of type '{}' is not yet supported.", resolved_type),
                                 parameter.span,
                             )) as Box<dyn IError>
                         })?;
@@ -52,7 +52,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let llvm_return_type = LlvmValue::type_to_basic_type_enum(return_type, self.context).ok_or_else(|| {
                         Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Compiling functions returning '{:?}' is not yet supported.", return_type),
+                            format!("Compiling functions returning '{}' is not yet supported.", return_type),
                             function_decl.return_type.span,
                         )) as Box<dyn IError>
                     })?;
@@ -82,15 +82,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     PassedBy::Value => {
                         let resolved_type = self.resolve_type(&parameter.value.parameter_type.value);
 
-                        let llvm_type = LlvmValue::type_to_basic_type_enum(&resolved_type, self.context).ok_or_else(|| {
-                            Box::new(CompilerError::at(
-                                ErrorSeverity::HIGH,
-                                format!("Compiling extern parameters of type '{:?}' is not yet supported.", resolved_type),
-                                parameter.span,
-                            )) as Box<dyn IError>
-                        })?;
+                        if matches!(resolved_type, Type::Str) {
+                            self.context.ptr_type(AddressSpace::default()).into()
+                        } else {
+                            let llvm_type = LlvmValue::type_to_basic_type_enum(&resolved_type, self.context).ok_or_else(|| {
+                                Box::new(CompilerError::at(
+                                    ErrorSeverity::HIGH,
+                                    format!("Compiling extern parameters of type '{}' is not yet supported.", resolved_type),
+                                    parameter.span,
+                                )) as Box<dyn IError>
+                            })?;
 
-                        llvm_type.into()
+                            llvm_type.into()
+                        }
                     }
                 };
 
@@ -106,7 +110,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let llvm_return_type = LlvmValue::type_to_basic_type_enum(return_type, self.context).ok_or_else(|| {
                         Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Compiling extern functions returning '{:?}' is not yet supported.", return_type),
+                            format!("Compiling extern functions returning '{}' is not yet supported.", return_type),
                             function_decl.return_type.span,
                         )) as Box<dyn IError>
                     })?;
@@ -148,6 +152,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(entry_block);
 
         let saved_variables = std::mem::take(&mut self.variables);
+        let saved_scopes = std::mem::take(&mut self.scopes);
+
+        // Parameters live in their own scope, opened before the function
+        // body's own block scope and closed (released) after it, on the
+        // fall-through path. `return` releases every active scope
+        // (parameters included) before jumping away, so this scope's own
+        // release below is skipped whenever the body always returns.
+        self.push_scope();
 
         for (index, parameter) in function_decl.parameters.iter().enumerate() {
             let identifier = parameter.value.identifier.value.as_str();
@@ -163,7 +175,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let llvm_type = LlvmValue::type_to_basic_type_enum(&param_type, self.context).ok_or_else(|| {
                         Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Compiling parameters of type '{:?}' is not yet supported.", param_type),
+                            format!("Compiling parameters of type '{}' is not yet supported.", param_type),
                             parameter.span,
                         )) as Box<dyn IError>
                     })?;
@@ -177,18 +189,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .build_store(ptr, param_value)
                         .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), parameter.span)) as Box<dyn IError>)?;
 
-                    self.variables.insert(identifier.to_string(), (ptr, param_type));
+                    // The caller already handed us an owned +1 reference
+                    // (see `build_function_call`), so the parameter is
+                    // tracked like any other owned local and released when
+                    // the function returns / falls off the end.
+                    self.declare_scoped_variable(identifier.to_string(), ptr, param_type);
                 }
 
                 PassedBy::Reference => {
                     let ptr = param_value.into_pointer_value();
 
+                    // Reference parameters alias the caller's storage - not
+                    // owned here, so they're just a lookup entry, never
+                    // released.
                     self.variables.insert(identifier.to_string(), (ptr, param_type));
                 }
             }
         }
 
         self.visit_block(&function_decl.block)?;
+
+        self.pop_scope_and_release(function_decl.return_type.span)?;
 
         let current_block = self.builder.get_insert_block().expect("builder should be positioned inside the function");
 
@@ -209,6 +230,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         self.variables = saved_variables;
+        self.scopes = saved_scopes;
 
         Ok(())
     }
@@ -216,10 +238,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(in crate::backend::llvm::compiler) fn build_function_call(
         &mut self,
         identifier: &'a Node<String>,
-        arguments: &'a Vec<Box<Node<Argument>>>,
+        arguments: &'a [Box<Node<Argument>>],
         span: Span,
     ) -> Result<(), Box<dyn IError>> {
         let name = identifier.value.as_str();
+        let is_extern = self.program.extern_functions.contains_key(name);
 
         let function = *self.functions.get(name).ok_or_else(|| {
             Box::new(CompilerError::at(
@@ -238,26 +261,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     let value = self.read_last_value()?;
 
-                    let value = match value {
-                        LlvmValue::Vector(ptr, inner) => {
-                            let copy_ptr = self.build_shallow_copy_vector(ptr, &inner, span)?;
-                            LlvmValue::Vector(copy_ptr, inner)
+                    match (is_extern, value) {
+                        (true, LlvmValue::Str(ptr)) => {
+                            let data_ptr = self.str_data_ptr(ptr, span)?;
+                            compiled_args.push(data_ptr.into());
                         }
 
-                        LlvmValue::Str(ptr) => {
+                        (false, LlvmValue::Str(ptr)) => {
+                            let value = LlvmValue::Str(ptr);
                             let copy_ptr = self.build_string_copy(ptr, span)?;
-                            LlvmValue::Str(copy_ptr)
+
+                            if Self::expr_needs_release_in_function_call(&argument.value.value.value) {
+                                self.release_value(&value, span)?;
+                            }
+
+                            compiled_args.push(LlvmValue::Str(copy_ptr).as_basic_value_enum().into());
                         }
 
-                        LlvmValue::Struct(ptr, ty) => {
+                        (false, LlvmValue::Vector(ptr, inner)) => {
+                            let value = LlvmValue::Vector(ptr, inner.clone());
+                            let copy_ptr = self.build_shallow_copy_vector(ptr, &inner, span)?;
+
+                            if Self::expr_needs_release_in_function_call(&argument.value.value.value) {
+                                self.release_value(&value, span)?;
+                            }
+
+                            compiled_args.push(LlvmValue::Vector(copy_ptr, inner).as_basic_value_enum().into());
+                        }
+
+                        (false, LlvmValue::Struct(ptr, ty)) => {
+                            let value = LlvmValue::Struct(ptr, ty.clone());
                             let copy_ptr = self.build_shallow_copy_struct(ptr, &ty, span)?;
-                            LlvmValue::Struct(copy_ptr, ty)
+
+                            if Self::expr_needs_release_in_function_call(&argument.value.value.value) {
+                                self.release_value(&value, span)?;
+                            }
+
+                            compiled_args.push(LlvmValue::Struct(copy_ptr, ty).as_basic_value_enum().into());
                         }
 
-                        other => other,
-                    };
-
-                    compiled_args.push(value.as_basic_value_enum().into());
+                        (_, value) => {
+                            compiled_args.push(value.as_basic_value_enum().into());
+                        }
+                    }
                 }
 
                 PassedBy::Reference => {
@@ -285,10 +331,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             )));
         };
 
-        self.last_value = match call_site.try_as_basic_value().basic() {
-            Some(return_value) => Some(LlvmValue::from_basic_value_enum(return_value, return_type)),
-            None => None,
-        };
+        self.last_value = call_site
+            .try_as_basic_value()
+            .basic()
+            .map(|return_value| LlvmValue::from_basic_value_enum(return_value, return_type));
 
         Ok(())
     }
@@ -311,7 +357,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     other => {
                         return Err(Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Cannot access field '{}' on type '{:?}'.", field.value, other.to_type()),
+                            format!("Cannot access field '{}' on type '{}'.", field.value, other.to_type()),
                             expression.span,
                         )));
                     }
@@ -350,13 +396,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 match &collection_value {
                     LlvmValue::Vector(vector_ptr, inner) => {
                         let inner = self.resolve_type(inner);
-
                         let struct_type = LlvmValue::vector_struct_type(self.context);
                         let ptr_type = self.context.ptr_type(AddressSpace::default());
 
                         let data_field = self
                             .builder
-                            .build_struct_gep(struct_type, *vector_ptr, 0, "idx.ref.data")
+                            .build_struct_gep(
+                                struct_type,
+                                *vector_ptr,
+                                crate::backend::llvm::llvm_alu::llvm_value::VEC_DATA,
+                                "idx.ref.data",
+                            )
                             .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), expression.span)) as Box<dyn IError>)?;
 
                         let data = self
@@ -372,7 +422,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         let element_llvm_type = LlvmValue::type_to_basic_type_enum(&inner, self.context).ok_or_else(|| {
                             Box::new(CompilerError::at(
                                 ErrorSeverity::HIGH,
-                                format!("Compiling vectors of type '{:?}' is not yet supported.", inner),
+                                format!("Compiling vectors of type '{}' is not yet supported.", inner),
                                 index.span,
                             )) as Box<dyn IError>
                         })?;
@@ -385,6 +435,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 })?
                         };
 
+                        // === TO JEST BRAKUJĄCE ===
+                        // FieldAccess na collection zrobił retain wektora.
+                        // Musimy go zbalansować, bo używamy tylko wskaźnika.
+                        if Self::expr_needs_release(&collection.value) {
+                            self.release_value(&collection_value, expression.span)?;
+                        }
+                        // ========================
+
                         Ok(element_ptr)
                     }
 
@@ -393,44 +451,54 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         let index_value = self.read_last_value()?;
                         let index_int = index_value.into_i64_value(index.span)?;
 
+                        let data = self.str_data_ptr(*str_ptr, expression.span)?;
                         let i8_type = self.context.i8_type();
 
                         let element_ptr = unsafe {
-                            self.builder.build_gep(i8_type, *str_ptr, &[index_int], "str.ref.ptr").map_err(|err| {
+                            self.builder.build_gep(i8_type, data, &[index_int], "str.ref.ptr").map_err(|err| {
                                 Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), expression.span)) as Box<dyn IError>
                             })?
                         };
+
+                        if Self::expr_needs_release(&collection.value) {
+                            self.release_value(&collection_value, expression.span)?;
+                        }
 
                         Ok(element_ptr)
                     }
 
                     other => Err(Box::new(CompilerError::at(
                         ErrorSeverity::HIGH,
-                        format!("Cannot index into type '{:?}'.", other.to_type()),
+                        format!("Cannot index into type '{}'.", other.to_type()),
                         expression.span,
                     ))),
                 }
             }
 
-            other => Err(Box::new(CompilerError::at(
+            _ => Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Cannot pass expression '{:?}' by reference.", other),
+                "Cannot pass expression by reference.".to_string(),
                 expression.span,
             ))),
         }
     }
 
+    /// Deep-copies a string: allocates a brand new `StrHeader` with its own
+    /// heap-allocated character buffer, refcount 1, independent from `ptr`.
+    /// This is what gives strings value semantics even though they're
+    /// heap-allocated and (internally) refcounted.
     pub(in crate::backend) fn build_string_copy(&mut self, ptr: PointerValue<'ctx>, span: Span) -> Result<PointerValue<'ctx>, Box<dyn IError>> {
-        let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
+        let err = Self::builder_err(span);
 
-        let context = self.context();
-        let i64_type = context.i64_type();
+        let i64_type = self.context.i64_type();
 
-        // strlen(ptr)
+        let source_data = self.str_data_ptr(ptr, span)?;
+
+        // strlen(source_data)
         let strlen = self
             .builder()
-            .build_call(self.libc().strlen_fn, &[ptr.into()], "str.copy.len")
-            .map_err(err)?
+            .build_call(self.libc().strlen_fn, &[source_data.into()], "str.copy.len")
+            .map_err(&err)?
             .try_as_basic_value()
             .basic()
             .expect("strlen should return a value")
@@ -440,58 +508,72 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let size = self
             .builder()
             .build_int_add(strlen, i64_type.const_int(1, false), "str.copy.size")
-            .map_err(err)?;
+            .map_err(&err)?;
 
         // malloc(size)
-        let new_ptr = self
+        let new_data = self
             .builder()
             .build_call(self.libc().malloc_fn, &[size.into()], "str.copy.malloc")
-            .map_err(err)?
+            .map_err(&err)?
             .try_as_basic_value()
             .basic()
             .expect("malloc should return a value")
             .into_pointer_value();
 
-        // strcpy(new_ptr, ptr)
+        // strcpy(new_data, source_data)
         self.builder()
-            .build_call(self.libc().strcpy_fn, &[new_ptr.into(), ptr.into()], "str.copy")
-            .map_err(err)?;
+            .build_call(self.libc().strcpy_fn, &[new_data.into(), source_data.into()], "str.copy")
+            .map_err(&err)?;
 
-        Ok(new_ptr)
+        self.build_str_header(new_data, span)
     }
 
+    #[allow(dead_code)]
     pub(in crate::backend::llvm::compiler) fn build_shallow_copy_struct(
         &mut self,
         ptr: PointerValue<'ctx>,
         ty: &Type,
         span: Span,
     ) -> Result<PointerValue<'ctx>, Box<dyn IError>> {
-        let Type::Struct { identifier, .. } = ty else {
+        let Type::Struct { identifier, fields, .. } = ty else {
             return Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Cannot build a shallow copy of non-struct type '{:?}'.", ty),
+                format!("Cannot build a shallow copy of non-struct type '{}'.", ty),
                 span,
             )));
         };
 
         let (struct_type, field_indices) = self.struct_llvm_type(identifier, span)?;
 
-        // let new_ptr = self
-        //     .builder
-        //     .build_alloca(struct_type, format!("{}.copy", identifier).as_str())
-        //     .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
+        let err = Self::builder_err(span);
+
+        // ---------------------------------------------------------------------
+        // Allocate the new struct.
+        // ---------------------------------------------------------------------
 
         let size = struct_type.size_of().expect("struct type should be sized");
+
         let new_ptr = self
             .builder
-            .build_call(self.libc.malloc_fn, &[size.into()], "struct.malloc")
-            .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?
+            .build_call(self.libc.malloc_fn, &[size.into()], "struct.copy.malloc")
+            .map_err(&err)?
             .try_as_basic_value()
             .basic()
             .expect("malloc should return a value")
             .into_pointer_value();
 
+        // ---------------------------------------------------------------------
+        // Copy fields.
+        //
+        // Primitive fields are copied directly.
+        //
+        // Heap-owned fields (str/vector/struct) are shallow-copied as pointers,
+        // but MUST receive retain(), because the new struct becomes another
+        // owner of the same heap object.
+        // ---------------------------------------------------------------------
+
         let mut sorted_fields: Vec<(&String, &u32)> = field_indices.iter().collect();
+
         sorted_fields.sort_by_key(|(_, idx)| **idx);
 
         for (field_name, field_index) in sorted_fields {
@@ -499,25 +581,77 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .get_field_type_at_index(*field_index)
                 .expect("field index should be valid, built from the same struct_type");
 
+            // -------------------------------------------------------------
+            // Source field.
+            // -------------------------------------------------------------
+
             let src_field_ptr = self
                 .builder
                 .build_struct_gep(struct_type, ptr, *field_index, format!("{}.src", field_name).as_str())
-                .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
+                .map_err(&err)?;
 
             let field_value = self
                 .builder
                 .build_load(field_llvm_type, src_field_ptr, format!("{}.load", field_name).as_str())
-                .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
+                .map_err(&err)?;
+
+            // -------------------------------------------------------------
+            // Destination field.
+            // -------------------------------------------------------------
 
             let dst_field_ptr = self
                 .builder
                 .build_struct_gep(struct_type, new_ptr, *field_index, format!("{}.dst", field_name).as_str())
-                .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
+                .map_err(&err)?;
 
-            self.builder
-                .build_store(dst_field_ptr, field_value)
-                .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
+            self.builder.build_store(dst_field_ptr, field_value).map_err(&err)?;
+
+            // -------------------------------------------------------------
+            // IMPORTANT:
+            //
+            // For heap objects the field contains only a pointer.
+            // build_store() does NOT increment the referenced object's
+            // refcount.
+            //
+            // The original struct owns one reference and the new struct
+            // becomes another owner, therefore retain().
+            // -------------------------------------------------------------
+
+            let field_type = fields.get(field_name).ok_or_else(|| {
+                Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    format!(
+                        "Field '{}' was found in LLVM struct but not in \
+                         the source struct type.",
+                        field_name
+                    ),
+                    span,
+                )) as Box<dyn IError>
+            })?;
+
+            let resolved_field_type = self.resolve_type(field_type);
+
+            if matches!(resolved_field_type, Type::Str | Type::Vector(_) | Type::Struct { .. }) {
+                let field_llvm_value = LlvmValue::from_basic_value_enum(field_value, &resolved_field_type);
+
+                self.retain_value(&field_llvm_value, span)?;
+            }
         }
+
+        // ---------------------------------------------------------------------
+        // New struct starts with exactly one owner: the caller of this function.
+        // ---------------------------------------------------------------------
+
+        let refcount_index = Self::struct_refcount_field_index(struct_type);
+
+        let refcount_field = self
+            .builder
+            .build_struct_gep(struct_type, new_ptr, refcount_index, "struct.copy.refcount")
+            .map_err(&err)?;
+
+        self.builder
+            .build_store(refcount_field, self.context.i64_type().const_int(1, false))
+            .map_err(&err)?;
 
         Ok(new_ptr)
     }

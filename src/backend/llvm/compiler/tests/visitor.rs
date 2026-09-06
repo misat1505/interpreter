@@ -52,8 +52,6 @@ fn visit_program_with_statements() {
     let mut compiler = with_main(&program, &context);
 
     assert!(compiler.visit_program(&program).is_ok());
-    assert!(compiler.get_variable("x").is_ok());
-    assert!(compiler.get_variable("b").is_ok());
 }
 
 #[test]
@@ -144,7 +142,6 @@ fn visit_block_with_statements() {
         }),
     ]));
     assert!(compiler.visit_block(&block).is_ok());
-    assert!(compiler.get_variable("a").is_ok());
 }
 
 // ─── visit_expression / visit_statement (dispatch) ──────────────────────────

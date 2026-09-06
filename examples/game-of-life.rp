@@ -1,20 +1,13 @@
-fn print_and_free(&str text): void {
-    print(text);
-    str_free(&text);
-}
 
 fn print_board(&char[][] board): void {
-    let escape = "\e[2J\e[H";
-    print_and_free(&escape);
+    print("\e[2J\e[H");
 
     for (let i = 0; i < vector_size(&board); i += 1) {
         for (let j = 0; j < vector_size(&board[0]); j += 1) {
-            let c = board[i][j] as str;
-            print_and_free(&c);
+            print(board[i][j] as str);
         }
 
-        let empty_line = "\n";
-        print_and_free(&empty_line);
+        println("");
     }
 }
 
@@ -64,17 +57,9 @@ fn game_of_life(&char[][] board): void {
     while (true) {
         print_board(&board);
         let new_board = next_state(&board);
-        free_board(&board);
         board = new_board;
         sleep_ms(100);
     }
-}
-
-fn free_board(&char[][] board): void {
-    for (let i = 0; i < vector_size(&board); i += 1) {
-        vector_free(&board[i]);
-    }
-    vector_free(&board);
 }
 
 # let board1 = [
@@ -104,4 +89,3 @@ let board2 = [
 ];
 
 game_of_life(&board2);
-free_board(&board2);

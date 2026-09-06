@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
 use crate::{
     backend::std_functions::std_functions::StdFunction,
@@ -84,6 +88,15 @@ pub enum Literal {
 pub enum PassedBy {
     Reference,
     Value,
+}
+
+impl Display for PassedBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value => write!(f, "Value"),
+            Self::Reference => write!(f, "Reference"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

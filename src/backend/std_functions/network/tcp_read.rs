@@ -26,7 +26,7 @@ pub fn tcp_read() -> StdFunction {
         let expected_types = vec![Type::I64];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(handle) = params.get(0) {
+        if let Some(handle) = params.first() {
             actual_types.push(handle.borrow().to_type());
 
             let handle = handle.borrow();
@@ -56,7 +56,7 @@ pub fn tcp_read() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'tcp_read' expects exactly one argument."),
@@ -70,11 +70,14 @@ pub fn tcp_read() -> StdFunction {
         let context = compiler.context();
         let i32_type = context.i32_type();
         let i64_type = context.i64_type();
+        let i8_type = context.i8_type();
+
         let buf_size = 4096u64;
 
         let fd_i32 = compiler.builder().build_int_truncate(fd, i32_type, "fd.i32").map_err(err)?;
 
         let malloc_fn = compiler.libc().malloc_fn;
+
         let buf = compiler
             .builder()
             .build_call(malloc_fn, &[i64_type.const_int(buf_size, false).into()], "recv.buf")
@@ -85,6 +88,7 @@ pub fn tcp_read() -> StdFunction {
             .into_pointer_value();
 
         let recv_fn = compiler.libc().recv_fn;
+
         let n = compiler
             .builder()
             .build_call(
@@ -103,14 +107,42 @@ pub fn tcp_read() -> StdFunction {
             .expect("recv should return a value")
             .into_int_value();
 
-        let end_ptr = unsafe { compiler.builder().build_gep(context.i8_type(), buf, &[n], "recv.end").map_err(err)? };
+        let end_ptr = unsafe { compiler.builder().build_gep(i8_type, buf, &[n], "recv.end").map_err(err)? };
+
+        compiler.builder().build_store(end_ptr, i8_type.const_int(0, false)).map_err(err)?;
+
+        let header = compiler
+            .builder()
+            .build_call(malloc_fn, &[i64_type.const_int(16, false).into()], "recv.header")
+            .map_err(err)?
+            .try_as_basic_value()
+            .basic()
+            .expect("malloc should return a value")
+            .into_pointer_value();
+
+        let refcount_field = unsafe {
+            compiler
+                .builder()
+                .build_gep(i8_type, header, &[i64_type.const_zero()], "recv.refcount.field")
+                .map_err(err)?
+        };
 
         compiler
             .builder()
-            .build_store(end_ptr, context.i8_type().const_int(0, false))
+            .build_store(refcount_field, i64_type.const_int(1, false))
             .map_err(err)?;
 
-        compiler.set_last_value(LlvmValue::Str(buf));
+        let data_field = unsafe {
+            compiler
+                .builder()
+                .build_gep(i8_type, header, &[i64_type.const_int(8, false)], "recv.data.field")
+                .map_err(err)?
+        };
+
+        compiler.builder().build_store(data_field, buf).map_err(err)?;
+
+        compiler.set_last_value(LlvmValue::Str(header));
+
         Ok(())
     };
 

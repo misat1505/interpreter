@@ -49,7 +49,7 @@ impl Lexer {
         options: LexerOptions,
         on_warning: fn(warning: Box<dyn IError>),
     ) -> Result<Self, Box<dyn IError>> {
-        let position = src.position().clone();
+        let position = src.position();
 
         let mut lexer = Lexer {
             src: Box::new(src),
@@ -71,7 +71,7 @@ impl Lexer {
         options: LexerOptions,
         on_warning: fn(warning: Box<dyn IError>),
     ) -> Result<Self, Box<dyn IError>> {
-        let position = src.position().clone();
+        let position = src.position();
 
         let lexer = Lexer {
             src: Box::new(src),
@@ -85,8 +85,8 @@ impl Lexer {
     }
 
     fn current_span(&self) -> Span {
-        let start = self.position.clone();
-        let end = self.src.position().clone();
+        let start = self.position;
+        let end = self.src.position();
 
         Span::new(start, end)
     }
@@ -97,7 +97,7 @@ impl Lexer {
             TokenValue::I64(value) => value.to_string(),
             TokenValue::String(value) => value.clone(),
             TokenValue::Char(value) => value.to_string(),
-            TokenValue::Null => format!("{:?}", token.category),
+            TokenValue::Null => format!("{}", token.category),
         }
     }
 
@@ -118,7 +118,7 @@ impl Lexer {
         Err(Box::new(LexerError::expected_found(
             ErrorSeverity::HIGH,
             "Unexpected token".to_string(),
-            format!("{:?}", category),
+            format!("{}", category),
             Self::token_text(&current_token),
             current_token.span,
         )))
@@ -132,7 +132,7 @@ impl Lexer {
     pub fn generate_token(&mut self) -> Result<Token, Box<dyn IError>> {
         self.skip_whitespaces();
 
-        self.position = self.src.position().clone();
+        self.position = self.src.position();
 
         let result_methods = [
             Self::try_generating_sign,
@@ -208,14 +208,14 @@ impl Lexer {
             None => Ok(None),
 
             Some(token_category) => {
-                let span_start = self.position.clone();
+                let span_start = self.position;
 
                 let _ = self.src.next();
 
-                let span = Span::new(span_start, self.src.position().clone());
+                let span = Span::new(span_start, self.src.position());
 
                 let token = Token {
-                    category: token_category.clone(),
+                    category: *token_category,
                     value: TokenValue::Null,
                     span,
                 };
@@ -248,11 +248,11 @@ impl Lexer {
     }
 
     fn single_char(&mut self, category: TokenCategory) -> Token {
-        let start = self.position.clone();
+        let start = self.position;
 
         let _ = self.src.next();
 
-        let end = self.src.position().clone();
+        let end = self.src.position();
 
         Token {
             category,
@@ -262,7 +262,7 @@ impl Lexer {
     }
 
     fn extend_to_next(&mut self, char_to_search: char, not_found: TokenCategory, found: TokenCategory) -> Token {
-        let start = self.position.clone();
+        let start = self.position;
 
         let next_char = self.src.next().unwrap();
 
@@ -272,26 +272,26 @@ impl Lexer {
             return Token {
                 category: found,
                 value: TokenValue::Null,
-                span: Span::new(start, self.src.position().clone()),
+                span: Span::new(start, self.src.position()),
             };
         }
 
         Token {
             category: not_found,
             value: TokenValue::Null,
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }
     }
 
     fn extend_to_next_or_warning(&mut self, char_to_search: char, found: TokenCategory) -> Token {
-        let start = self.position.clone();
+        let start = self.position;
 
         let next_char = self.src.next().unwrap();
 
         if *next_char == char_to_search {
             let _ = self.src.next();
         } else {
-            let span = Span::new(start.clone(), self.src.position().clone());
+            let span = Span::new(start, self.src.position());
 
             (self.on_warning)(Box::new(LexerError::at(
                 ErrorSeverity::LOW,
@@ -303,12 +303,12 @@ impl Lexer {
         Token {
             category: found,
             value: TokenValue::Null,
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }
     }
 
     fn extend_minus(&mut self) -> Token {
-        let start = self.position.clone();
+        let start = self.position;
 
         let next_char = self.src.next().unwrap();
 
@@ -318,7 +318,7 @@ impl Lexer {
             return Token {
                 category: TokenCategory::Arrow,
                 value: TokenValue::Null,
-                span: Span::new(start, self.src.position().clone()),
+                span: Span::new(start, self.src.position()),
             };
         }
 
@@ -328,39 +328,39 @@ impl Lexer {
             return Token {
                 category: TokenCategory::MinusEquals,
                 value: TokenValue::Null,
-                span: Span::new(start, self.src.position().clone()),
+                span: Span::new(start, self.src.position()),
             };
         }
 
         Token {
             category: TokenCategory::Minus,
             value: TokenValue::Null,
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }
     }
 
     fn try_generating_char(&mut self) -> Result<Option<Token>, Box<dyn IError>> {
-        let start = self.position.clone();
+        let start = self.position;
 
-        let current_char = self.src.current().clone();
+        let current_char = self.src.current();
 
-        if current_char != '\'' {
+        if *current_char != '\'' {
             return Ok(None);
         }
 
-        let mut next_char = self.src.next().unwrap().clone();
+        let mut next_char = self.src.next().unwrap();
 
-        if next_char == '\'' {
-            let span = Span::new(start, self.src.position().clone());
+        if *next_char == '\'' {
+            let span = Span::new(start, self.src.position());
             return Err(Box::new(LexerError::at(ErrorSeverity::HIGH, "Empty char literal".to_string(), span)));
         }
 
-        if next_char == '\n' {
+        if *next_char == '\n' {
             return Err(self.create_lexer_error("Unexpected newline in char literal".to_string()));
         }
 
-        if next_char == ETX {
-            let span = Span::new(start, self.src.position().clone());
+        if *next_char == ETX {
+            let span = Span::new(start, self.src.position());
             return Err(Box::new(LexerError::at(
                 ErrorSeverity::HIGH,
                 "Unexpected end of file in char literal".to_string(),
@@ -370,15 +370,15 @@ impl Lexer {
 
         let value: char;
 
-        if next_char == '\\' {
-            let escaped_char = self.src.next().unwrap().clone();
+        if *next_char == '\\' {
+            let escaped_char = *self.src.next().unwrap();
 
             match ESCAPES.get(&escaped_char) {
                 Some(escaped) => {
                     value = *escaped;
                 }
                 None => {
-                    let span = Span::new(start, self.src.position().clone());
+                    let span = Span::new(start, self.src.position());
                     return Err(Box::new(LexerError::at(
                         ErrorSeverity::HIGH,
                         format!("Invalid escape symbol detected '\\{}'", escaped_char),
@@ -387,13 +387,13 @@ impl Lexer {
                 }
             }
         } else {
-            value = next_char;
+            value = *next_char;
         }
 
-        next_char = self.src.next().unwrap().clone();
+        next_char = self.src.next().unwrap();
 
-        if next_char != '\'' {
-            let span = Span::new(start, self.src.position().clone());
+        if *next_char != '\'' {
+            let span = Span::new(start, self.src.position());
             return Err(Box::new(LexerError::at(
                 ErrorSeverity::HIGH,
                 "Char literal must contain exactly one character".to_string(),
@@ -406,14 +406,14 @@ impl Lexer {
         Ok(Some(Token {
             category: TokenCategory::CharValue,
             value: TokenValue::Char(value),
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }))
     }
 
     fn try_generating_string(&mut self) -> Result<Option<Token>, Box<dyn IError>> {
-        let start = self.position.clone();
+        let start = self.position;
 
-        let mut current_char = self.src.current().clone();
+        let mut current_char = *self.src.current();
 
         if current_char != '"' {
             return Ok(None);
@@ -421,11 +421,11 @@ impl Lexer {
 
         let mut created_string = String::new();
 
-        current_char = self.src.next().unwrap().clone();
+        current_char = *self.src.next().unwrap();
 
         while current_char != '"' {
             if current_char == '\\' {
-                let next_char = self.src.next().unwrap().clone();
+                let next_char = *self.src.next().unwrap();
 
                 match ESCAPES.get(&next_char) {
                     Some(char) => {
@@ -436,7 +436,7 @@ impl Lexer {
 
                     None => {
                         let warning_text = format!("Invalid escape symbol detected '\\{}'", next_char);
-                        let span = Span::new(start.clone(), self.src.position().clone());
+                        let span = Span::new(start, self.src.position());
 
                         (self.on_warning)(Box::new(LexerError::at(ErrorSeverity::LOW, warning_text, span)));
 
@@ -453,20 +453,20 @@ impl Lexer {
             }
 
             if current_char == ETX {
-                let span = Span::new(start.clone(), self.src.position().clone());
+                let span = Span::new(start, self.src.position());
 
                 (self.on_warning)(Box::new(LexerError::at(ErrorSeverity::LOW, "String not closed".to_string(), span)));
 
                 return Ok(Some(Token {
                     category: TokenCategory::StringValue,
                     value: TokenValue::String(created_string),
-                    span: Span::new(start, self.src.position().clone()),
+                    span: Span::new(start, self.src.position()),
                 }));
             }
 
             created_string.push(current_char);
 
-            current_char = self.src.next().unwrap().clone();
+            current_char = *self.src.next().unwrap();
         }
 
         // consume closing "
@@ -475,14 +475,14 @@ impl Lexer {
         Ok(Some(Token {
             category: TokenCategory::StringValue,
             value: TokenValue::String(created_string),
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }))
     }
 
     fn try_generating_number(&mut self) -> Result<Option<Token>, Box<dyn IError>> {
-        let start = self.position.clone();
+        let start = self.position;
 
-        let mut current_char = self.src.current().clone();
+        let mut current_char = *self.src.current();
 
         if !current_char.is_ascii_digit() {
             return Ok(None);
@@ -500,13 +500,13 @@ impl Lexer {
             }
         }
 
-        current_char = self.src.current().clone();
+        current_char = *self.src.current();
 
         if current_char != '.' {
             return Ok(Some(Token {
                 category: TokenCategory::I64Value,
                 value: TokenValue::I64(decimal),
-                span: Span::new(start, self.src.position().clone()),
+                span: Span::new(start, self.src.position()),
             }));
         }
 
@@ -519,7 +519,7 @@ impl Lexer {
         Ok(Some(Token {
             category: TokenCategory::F64Value,
             value: TokenValue::F64(float_value),
-            span: Span::new(start, self.src.position().clone()),
+            span: Span::new(start, self.src.position()),
         }))
     }
 
@@ -573,9 +573,9 @@ impl Lexer {
     }
 
     fn try_creating_identifier_or_keyword(&mut self) -> Result<Option<Token>, Box<dyn IError>> {
-        let start = self.position.clone();
+        let start = self.position;
 
-        let mut current_char = self.src.current().clone();
+        let mut current_char = self.src.current();
 
         if !current_char.is_ascii_alphabetic() {
             return Ok(None);
@@ -583,7 +583,7 @@ impl Lexer {
 
         let mut created_string = String::new();
 
-        while current_char.is_ascii_digit() || current_char.is_ascii_alphabetic() || current_char == '_' {
+        while current_char.is_ascii_digit() || current_char.is_ascii_alphabetic() || *current_char == '_' {
             if (created_string.len() as u32) == self.options.max_identifier_length {
                 return Err(self.create_lexer_error(format!(
                     "Identifier name too long. Max identifier length: {}",
@@ -591,16 +591,16 @@ impl Lexer {
                 )));
             }
 
-            created_string.push(current_char);
+            created_string.push(*current_char);
 
-            current_char = self.src.next().unwrap().clone();
+            current_char = self.src.next().unwrap();
         }
 
-        let span = Span::new(start, self.src.position().clone());
+        let span = Span::new(start, self.src.position());
 
         match KEYWORDS.get(created_string.as_str()) {
             Some(category) => Ok(Some(Token {
-                category: category.clone(),
+                category: *category,
                 value: TokenValue::Null,
                 span,
             })),
@@ -614,9 +614,9 @@ impl Lexer {
     }
 
     fn create_lexer_error(&mut self, text: String) -> Box<dyn IError> {
-        let end = self.src.position().clone();
+        let end = self.src.position();
 
-        let span = Span::new(self.position.clone(), end);
+        let span = Span::new(self.position, end);
 
         Box::new(LexerError::at(ErrorSeverity::HIGH, text, span))
     }

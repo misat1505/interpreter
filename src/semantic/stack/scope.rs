@@ -54,7 +54,7 @@ impl<'a> StaticCheckerScope<'a> {
                     Err(ScopeManagerError::new(
                         ErrorSeverity::HIGH,
                         format!(
-                            "Cannot assign '{:?}' to variable '{}' which was previously declared as '{:?}'.",
+                            "Cannot assign '{}' to variable '{}' which was previously declared as '{}'.",
                             value, name, prev.ty
                         ),
                         span,

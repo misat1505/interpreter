@@ -169,7 +169,7 @@ fn type_to_basic_type_enum_all_supported() {
         Type::Vector(Box::new(Type::I64)),
     ];
     for ty in supported {
-        assert!(LlvmValue::type_to_basic_type_enum(&ty, &context).is_some(), "expected Some for {:?}", ty);
+        assert!(LlvmValue::type_to_basic_type_enum(&ty, &context).is_some(), "expected Some for {}", ty);
     }
 
     assert!(LlvmValue::type_to_basic_type_enum(&Type::Void, &context).is_none());
@@ -179,8 +179,8 @@ fn type_to_basic_type_enum_all_supported() {
 fn vector_struct_type_has_three_fields() {
     let context = Context::create();
     let st = LlvmValue::vector_struct_type(&context);
-    // { ptr, i64, i64 } — data, len, capacity
-    assert_eq!(st.count_fields(), 3);
+    // { i64, ptr, i64, i64 } — ref_count, data, len, capacity
+    assert_eq!(st.count_fields(), 4);
 }
 
 #[test]

@@ -3,7 +3,7 @@ use std::io::BufReader;
 use crate::common::assert_same_output;
 
 #[test]
-fn game_of_life() {
+fn split_path() {
     let text = BufReader::new(
         r##"
 fn split_by_delim(str text, char delim): str[] {

@@ -46,8 +46,7 @@ impl<'a> SemanticChecker<'a> {
                         )));
                     }
                     let mut collected_types: Vec<Type> = vec![];
-                    for idx in 0..arguments.len() {
-                        let argument = &arguments[idx];
+                    for (idx, argument) in arguments.iter().enumerate() {
                         let _ = self.visit_expression(&argument.value.value);
                         let actual_type = self.read_last_result(argument.span).ok();
                         let expected_passed_by = std_function.passed_by.get(idx).unwrap_or(&PassedBy::Value);
@@ -55,11 +54,11 @@ impl<'a> SemanticChecker<'a> {
                             self.errors.push(Box::new(SemanticCheckerError::expected_found(
                                 ErrorSeverity::HIGH,
                                 format!(
-                                    "Parameter {} of function `{}` expects to be passed by {:?}, but was passed by {:?}.",
+                                    "Parameter {} of function `{}` expects to be passed by {}, but was passed by {}.",
                                     idx, name, expected_passed_by, argument.value.passed_by
                                 ),
-                                format!("{:?}", expected_passed_by),
-                                format!("{:?}", argument.value.passed_by),
+                                format!("{}", expected_passed_by),
+                                format!("{}", argument.value.passed_by),
                                 argument.span,
                             )));
                         }
@@ -112,12 +111,12 @@ impl<'a> SemanticChecker<'a> {
                         .enumerate()
                         .map(|(idx, t)| {
                             let by_ref = std_function.passed_by.get(idx) == Some(&PassedBy::Reference);
-                            format!("{}{:?}", if by_ref { "&" } else { "" }, t)
+                            format!("{}{}", if by_ref { "&" } else { "" }, t)
                         })
                         .collect::<Vec<_>>()
                         .join(", ");
                     self.hovers.push(HoverInfo {
-                        contents: format!("```raptor\nfn {}({}): {:?}\n```", name, params_str, std_function.return_type),
+                        contents: format!("```raptor\nfn {}({}): {}\n```", name, params_str, std_function.return_type),
                         span: identifier.span,
                     });
                     return;
@@ -134,8 +133,7 @@ impl<'a> SemanticChecker<'a> {
                             *span,
                         )));
                     }
-                    for idx in 0..arguments.len() {
-                        let argument = &arguments[idx];
+                    for (idx, argument) in arguments.iter().enumerate() {
                         let _ = self.visit_expression(&argument.value.value);
                         let actual_type = self.read_last_result(argument.span).ok();
                         if let Some(parameter) = parameters.get(idx) {
@@ -143,11 +141,11 @@ impl<'a> SemanticChecker<'a> {
                                 self.errors.push(Box::new(SemanticCheckerError::expected_found(
                                     ErrorSeverity::HIGH,
                                     format!(
-                                        "Parameter `{}` of extern function `{}` expects to be passed by {:?}, but was passed by {:?}.",
+                                        "Parameter `{}` of extern function `{}` expects to be passed by {}, but was passed by {}.",
                                         parameter.value.identifier.value, name, parameter.value.passed_by, argument.value.passed_by
                                     ),
-                                    format!("{:?}", parameter.value.passed_by),
-                                    format!("{:?}", argument.value.passed_by),
+                                    format!("{}", parameter.value.passed_by),
+                                    format!("{}", argument.value.passed_by),
                                     argument.span,
                                 )));
                             }
@@ -185,7 +183,7 @@ impl<'a> SemanticChecker<'a> {
                         .ok();
                     self.hovers.push(HoverInfo {
                         contents: format!(
-                            "```raptor\nextern fn {}({}): {:?};\n```",
+                            "```raptor\nextern fn {}({}): {};\n```",
                             name,
                             format_parameters(parameters),
                             function_declaration.value.return_type.value
@@ -206,8 +204,7 @@ impl<'a> SemanticChecker<'a> {
                             *span,
                         )));
                     }
-                    for idx in 0..arguments.len() {
-                        let argument = &arguments[idx];
+                    for (idx, argument) in arguments.iter().enumerate() {
                         let _ = self.visit_expression(&argument.value.value);
                         let actual_type = self.read_last_result(argument.span).ok();
                         if let Some(parameter) = parameters.get(idx) {
@@ -215,11 +212,11 @@ impl<'a> SemanticChecker<'a> {
                                 self.errors.push(Box::new(SemanticCheckerError::expected_found(
                                     ErrorSeverity::HIGH,
                                     format!(
-                                        "Parameter `{}` of function `{}` expects to be passed by {:?}, but was passed by {:?}.",
+                                        "Parameter `{}` of function `{}` expects to be passed by {}, but was passed by {}.",
                                         parameter.value.identifier.value, name, parameter.value.passed_by, argument.value.passed_by
                                     ),
-                                    format!("{:?}", parameter.value.passed_by),
-                                    format!("{:?}", argument.value.passed_by),
+                                    format!("{}", parameter.value.passed_by),
+                                    format!("{}", argument.value.passed_by),
                                     argument.span,
                                 )));
                             }
@@ -259,7 +256,7 @@ impl<'a> SemanticChecker<'a> {
                         .ok();
                     self.hovers.push(HoverInfo {
                         contents: format!(
-                            "```raptor\nfn {}({}): {:?}\n```",
+                            "```raptor\nfn {}({}): {}\n```",
                             name,
                             format_parameters(parameters),
                             function_declaration.value.return_type.value
@@ -284,7 +281,7 @@ fn format_parameters(parameters: &[Node<Parameter>]) -> String {
         .iter()
         .map(|p| {
             let by_ref = if p.value.passed_by == PassedBy::Reference { "&" } else { "" };
-            format!("{}{:?} {}", by_ref, p.value.parameter_type.value, p.value.identifier.value)
+            format!("{}{} {}", by_ref, p.value.parameter_type.value, p.value.identifier.value)
         })
         .collect::<Vec<_>>()
         .join(", ")

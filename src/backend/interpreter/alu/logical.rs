@@ -14,7 +14,7 @@ impl ALU {
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Cannot perform concatenation between values of type '{:?}' and '{:?}'.",
+                    "Cannot perform concatenation between values of type '{}' and '{}'.",
                     a.to_type(),
                     b.to_type()
                 ),
@@ -29,7 +29,7 @@ impl ALU {
             (a, b) => Err(ComputationError::new(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Cannot perform alternative between values of type '{:?}' and '{:?}'.",
+                    "Cannot perform alternative between values of type '{}' and '{}'.",
                     a.to_type(),
                     b.to_type()
                 ),

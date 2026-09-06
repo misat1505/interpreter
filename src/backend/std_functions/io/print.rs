@@ -5,7 +5,7 @@ use inkwell::AddressSpace;
 use crate::{
     backend::{
         interpreter::Value,
-        llvm::LlvmValue,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -25,7 +25,7 @@ pub fn print() -> StdFunction {
         let expected_types = vec![Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(value) = params.get(0) {
+        if let Some(value) = params.first() {
             actual_types.push(value.borrow().to_type());
 
             let value = value.borrow();
@@ -45,7 +45,7 @@ pub fn print() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |err: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'print' expects exactly one argument."),
@@ -57,18 +57,32 @@ pub fn print() -> StdFunction {
         let text_value = compiler.read_last_value()?;
 
         let text_ptr = match text_value {
-            LlvmValue::Str(ptr) => ptr,
+            LlvmValue::Str(ptr) => {
+                let i8_type = compiler.context().i8_type();
+                let i8_ptr_type = compiler.context().ptr_type(AddressSpace::default());
+
+                let data_field = unsafe {
+                    compiler
+                        .builder()
+                        .build_gep(i8_type, ptr, &[compiler.context().i64_type().const_int(8, false)], "str.data.field")
+                }
+                .map_err(err)?;
+
+                compiler
+                    .builder()
+                    .build_load(i8_ptr_type, data_field, "str.data")
+                    .map_err(err)?
+                    .into_pointer_value()
+            }
 
             other => {
                 return Err(Box::new(CompilerError::at(
                     ErrorSeverity::HIGH,
-                    format!("'print' expects a string, got '{:?}'.", other.to_type()),
+                    format!("'print' expects a string, got '{}'.", other.to_type()),
                     span,
                 )));
             }
         };
-
-        let owned_ptr = compiler.build_string_copy(text_ptr, span)?;
 
         let printf_fn = compiler.libc().printf_fn;
 
@@ -76,7 +90,7 @@ pub fn print() -> StdFunction {
 
         compiler
             .builder()
-            .build_call(printf_fn, &[format_str.as_pointer_value().into(), owned_ptr.into()], "printf_call")
+            .build_call(printf_fn, &[format_str.as_pointer_value().into(), text_ptr.into()], "printf_call")
             .map_err(err)?;
 
         let null_stream = compiler.context().ptr_type(AddressSpace::default()).const_null();
@@ -86,7 +100,9 @@ pub fn print() -> StdFunction {
             .build_call(compiler.libc().fflush_fn, &[null_stream.into()], "fflush.stdout")
             .map_err(err)?;
 
-        compiler.builder().build_free(owned_ptr).map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&arg.value.value.value) {
+            compiler.release_value(&text_value, arg.value.value.span)?;
+        }
 
         Ok(())
     };

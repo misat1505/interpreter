@@ -20,12 +20,12 @@ pub struct Parser<L: ILexer> {
 }
 
 pub trait IParser<L: ILexer> {
-    fn new(lexer: L) -> Parser<L>;
+    fn new(lexer: L) -> Self;
     fn parse(&mut self) -> Result<Program, Box<dyn IError>>;
 }
 
 impl<L: ILexer> IParser<L> for Parser<L> {
-    fn new(lexer: L) -> Parser<L> {
+    fn new(lexer: L) -> Self {
         Parser { lexer }
     }
 

@@ -3,6 +3,7 @@ use std::{cell::RefCell, io::Write, rc::Rc, vec};
 use crate::{
     backend::{
         interpreter::Value,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::{
             network::state::STREAMS,
             std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
@@ -25,7 +26,7 @@ pub fn tcp_write() -> StdFunction {
         let expected_types = vec![Type::I64, Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        let handle_param = params.get(0);
+        let handle_param = params.first();
         let data_param = params.get(1);
 
         if let (Some(handle), Some(data)) = (handle_param, data_param) {
@@ -61,7 +62,7 @@ pub fn tcp_write() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let fd_arg = arguments.get(0).ok_or_else(|| {
+        let fd_arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'tcp_write' expects exactly two arguments."),
@@ -81,8 +82,36 @@ pub fn tcp_write() -> StdFunction {
         let fd = compiler.read_last_value()?.into_i64_value(span)?;
 
         compiler.visit_expression(&data_arg.value.value)?;
-        let data_ptr = compiler.read_last_value()?.into_str_value(span)?;
-        let owned_ptr = compiler.build_string_copy(data_ptr, span)?;
+        let data_value = compiler.read_last_value()?;
+
+        let data_ptr = match data_value {
+            LlvmValue::Str(ptr) => ptr,
+            _ => {
+                return Err(Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    String::from("'tcp_write' expects a string as its second argument."),
+                    span,
+                )))
+            }
+        };
+
+        let data_field = unsafe {
+            compiler
+                .builder()
+                .build_gep(
+                    compiler.context().i8_type(),
+                    data_ptr,
+                    &[compiler.context().i64_type().const_int(8, false)],
+                    "str.data.field",
+                )
+                .map_err(err)?
+        };
+
+        let text_ptr = compiler
+            .builder()
+            .build_load(compiler.context().ptr_type(inkwell::AddressSpace::default()), data_field, "str.data")
+            .map_err(err)?
+            .into_pointer_value();
 
         let context = compiler.context();
         let i32_type = context.i32_type();
@@ -93,7 +122,7 @@ pub fn tcp_write() -> StdFunction {
 
         let len = compiler
             .builder()
-            .build_call(strlen_fn, &[owned_ptr.into()], "data.len")
+            .build_call(strlen_fn, &[text_ptr.into()], "data.len")
             .map_err(err)?
             .try_as_basic_value()
             .basic()
@@ -106,17 +135,14 @@ pub fn tcp_write() -> StdFunction {
             .builder()
             .build_call(
                 send_fn,
-                &[fd_i32.into(), owned_ptr.into(), len.into(), i32_type.const_int(0, false).into()],
+                &[fd_i32.into(), text_ptr.into(), len.into(), i32_type.const_int(0, false).into()],
                 "send.call",
             )
             .map_err(err)?;
 
-        let free_fn = compiler.libc().free_fn;
-
-        compiler
-            .builder()
-            .build_call(free_fn, &[owned_ptr.into()], "tcp_write.free_data")
-            .map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&data_arg.value.value.value) {
+            compiler.release_value(&data_value, data_arg.value.value.span)?;
+        }
 
         Ok(())
     };

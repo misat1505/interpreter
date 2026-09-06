@@ -30,19 +30,23 @@ impl<'a> Interpreter<'a> {
 
             Expression::BooleanNegation(value) => self.evaluate_unary_op(value, ALU::boolean_negate)?,
             Expression::ArithmeticNegation(value) => self.evaluate_unary_op(value, ALU::arithmetic_negate)?,
+
             Expression::Addition(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::add)?,
             Expression::Subtraction(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::subtract)?,
             Expression::Multiplication(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::multiplication)?,
             Expression::Division(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::division)?,
             Expression::Modulo(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::modulo)?,
+
             Expression::Alternative(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::alternative)?,
             Expression::Concatenation(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::concatenation)?,
+
             Expression::Greater(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::greater)?,
             Expression::GreaterEqual(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::greater_or_equal)?,
             Expression::Less(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::less)?,
             Expression::LessEqual(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::less_or_equal)?,
             Expression::Equal(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::equal)?,
             Expression::NotEqual(lhs, rhs) => self.evaluate_binary_op(lhs, rhs, ALU::not_equal)?,
+
             Expression::Literal(literal) => self.visit_literal(literal)?,
             Expression::Vector(vector) => self.visit_vector_literal(vector)?,
             Expression::Variable(variable) => self.visit_variable(variable, expression.span)?,
@@ -69,7 +73,7 @@ impl<'a> Interpreter<'a> {
                 ErrorSeverity::HIGH,
                 format!("Cannot access field '{}' on this value.", field.value),
                 String::from("struct"),
-                format!("{:?}", instance_value.to_type()),
+                format!("{}", instance_value.to_type()),
                 instance.span,
             )));
         };
@@ -106,7 +110,7 @@ impl<'a> Interpreter<'a> {
 
     pub(in crate::backend::interpreter::interpreter) fn eval_vector_literal(
         &mut self,
-        expressions: &'a Vec<Box<Node<Expression>>>,
+        expressions: &'a [Box<Node<Expression>>],
     ) -> Result<(), Box<dyn IError>> {
         let values = Rc::new(RefCell::new(Vec::new()));
 
@@ -130,7 +134,7 @@ impl<'a> Interpreter<'a> {
     pub(in crate::backend::interpreter::interpreter) fn eval_struct_literal(
         &mut self,
         identifier: &'a Node<String>,
-        fields: &'a Vec<Node<StructLiteralField>>,
+        fields: &'a [Node<StructLiteralField>],
         span: Span,
     ) -> Result<(), Box<dyn IError>> {
         let declared_type = self.program.types.get(&identifier.value).cloned().ok_or_else(|| {
@@ -167,7 +171,7 @@ impl<'a> Interpreter<'a> {
 
             if let (Type::Vector(_), Value::Vector { kind, .. }) = (expected_type, &mut value) {
                 if *kind.as_ref() == Type::Void {
-                    *kind = Box::new(expected_type.clone());
+                    **kind = expected_type.clone();
                 }
             }
 
@@ -183,14 +187,10 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    pub(in crate::backend::interpreter::interpreter) fn eval_variable(
-        &mut self,
-        variable: &'a String,
-        span: crate::common::span::Span,
-    ) -> Result<(), Box<dyn IError>> {
+    pub(in crate::backend::interpreter::interpreter) fn eval_variable(&mut self, variable: &'a str, span: Span) -> Result<(), Box<dyn IError>> {
         let value = self
             .stack
-            .get_variable(variable.as_str(), span)
+            .get_variable(variable, span)
             .map_err(|err| Box::new(InterpreterError::at(ErrorSeverity::HIGH, err.message(), span)) as Box<dyn IError>)?;
 
         self.last_result = Some(value.borrow().clone());
@@ -246,7 +246,7 @@ impl<'a> Interpreter<'a> {
                 ErrorSeverity::HIGH,
                 String::from("Cannot index into this value."),
                 String::from("Vector or Str"),
-                format!("{:?}", other.to_type()),
+                format!("{}", other.to_type()),
                 collection.span,
             ))),
         }
@@ -264,7 +264,7 @@ impl<'a> Interpreter<'a> {
                 ErrorSeverity::HIGH,
                 String::from("Array index must be a non-negative i64."),
                 String::from("I64"),
-                format!("{:?}", other.to_type()),
+                format!("{}", other.to_type()),
                 index.span,
             ))),
         }
@@ -278,15 +278,15 @@ impl<'a> Interpreter<'a> {
                 ErrorSeverity::HIGH,
                 String::from("Array index must be a non-negative i64."),
                 String::from("I64"),
-                format!("{:?}", other.to_type()),
+                format!("{}", other.to_type()),
                 self.span,
             ))),
         }
     }
 
-    fn evaluate_binary_op<F>(&mut self, lhs: &'a Box<Node<Expression>>, rhs: &'a Box<Node<Expression>>, op: F) -> Result<(), Box<dyn IError>>
+    fn evaluate_binary_op<F>(&mut self, lhs: &'a Node<Expression>, rhs: &'a Node<Expression>, op: F) -> Result<(), Box<dyn IError>>
     where
-        F: Fn(Value, Value, crate::common::span::Span) -> Result<Value, ComputationError>,
+        F: Fn(Value, Value, Span) -> Result<Value, ComputationError>,
     {
         self.visit_expression(lhs)?;
         let left_value = self.read_last_result()?;
@@ -302,9 +302,9 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    fn evaluate_unary_op<F>(&mut self, value: &'a Box<Node<Expression>>, op: F) -> Result<(), Box<dyn IError>>
+    fn evaluate_unary_op<F>(&mut self, value: &'a Node<Expression>, op: F) -> Result<(), Box<dyn IError>>
     where
-        F: Fn(Value, crate::common::span::Span) -> Result<Value, ComputationError>,
+        F: Fn(Value, Span) -> Result<Value, ComputationError>,
     {
         self.visit_expression(value)?;
         let computed_value = self.read_last_result()?;

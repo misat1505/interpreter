@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Display};
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Bool,
     Str,
@@ -32,7 +32,7 @@ pub enum Type {
     Any, // internal, not available for the user
 }
 
-impl Debug for Type {
+impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Bool => Ok(write!(f, "bool")?),
@@ -48,7 +48,7 @@ impl Debug for Type {
             Type::Str => Ok(write!(f, "str")?),
             Type::Char => Ok(write!(f, "char")?),
             Type::Void => Ok(write!(f, "void")?),
-            Type::Vector(inner) => write!(f, "{:?}[]", inner),
+            Type::Vector(inner) => write!(f, "{}[]", inner),
             Type::Struct { identifier, .. } => write!(f, "{}", identifier),
             Type::Unresolved(name) => write!(f, "Unresolved({})", name),
             Type::Any => Ok(write!(f, "any")?),

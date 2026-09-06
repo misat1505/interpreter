@@ -23,7 +23,7 @@ impl TypeALU {
             (Type::F64, Type::F64) => Ok(Type::F64),
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform {} between values of type '{:?}' and '{:?}'.", op_name, a, b),
+                format!("Cannot perform {} between values of type '{}' and '{}'.", op_name, a, b),
                 span,
             )),
         }
@@ -48,7 +48,7 @@ impl TypeALU {
             (Type::Char, Type::Str) => Ok(Type::Str),
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform addition between values of type '{:?}' and '{:?}'.", a, b),
+                format!("Cannot perform addition between values of type '{}' and '{}'.", a, b),
                 span,
             )),
         }
@@ -79,7 +79,7 @@ impl TypeALU {
             (Type::U64, Type::U64) => Ok(Type::U64),
             (a, b) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot perform modulo between values of type '{:?}' and '{:?}'.", a, b),
+                format!("Cannot perform modulo between values of type '{}' and '{}'.", a, b),
                 span,
             )),
         }

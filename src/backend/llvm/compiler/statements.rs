@@ -7,6 +7,7 @@ use crate::{
     backend::llvm::llvm_alu::llvm_value::LlvmValue,
     common::{
         errors::{CompilerError, ErrorSeverity, IError},
+        span::Span,
         types::Type,
     },
     frontend::ast::{Expression, Node, Statement},
@@ -22,10 +23,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let name = identifier.value.as_str();
 
                 if let Some(std_function) = self.program.std_functions.get(name) {
-                    return (std_function.compile)(self, arguments, span);
+                    (std_function.compile)(self, arguments, span)?;
+                } else {
+                    self.build_function_call(identifier, arguments, span)?;
                 }
 
-                self.build_function_call(identifier, arguments, span)
+                // Used as a bare statement: the return value (if any) is
+                // discarded. If it's an owned heap value nobody stored it
+                // anywhere, so it must be released here or it leaks.
+                if let Some(value) = self.last_value.take() {
+                    self.release_value(&value, span)?;
+                }
+
+                Ok(())
             }
 
             Statement::Declaration { identifier, kind } => match kind {
@@ -33,7 +43,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let llvm_type = LlvmValue::type_to_basic_type_enum(&var_type.value, self.context).ok_or_else(|| {
                         Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Compiling declarations of type '{:?}' is not yet supported.", var_type.value),
+                            format!("Compiling declarations of type '{}' is not yet supported.", var_type.value),
                             span,
                         )) as Box<dyn IError>
                     })?;
@@ -70,12 +80,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                                 let init_value = self.read_last_value()?;
 
-                                let init_value = if let LlvmValue::Str(str_ptr) = &init_value {
-                                    let copied = self.build_string_copy(*str_ptr, span)?;
-                                    LlvmValue::Str(copied)
-                                } else {
-                                    init_value
-                                };
+                                let init_value = self.finalize_owned_value_for_new_slot(init_value, &val_expr.value, span)?;
 
                                 self.builder
                                     .build_store(ptr, init_value.as_basic_value_enum())
@@ -88,7 +93,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         }
                     }
 
-                    self.variables.insert(identifier.value.clone(), (ptr, var_type.value.clone()));
+                    self.declare_scoped_variable(identifier.value.clone(), ptr, var_type.value.clone());
 
                     Ok(())
                 }
@@ -104,7 +109,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             return Err(Box::new(CompilerError::at(
                                 ErrorSeverity::HIGH,
                                 format!(
-                                    "Cannot infer type of empty vector. Consider adding a type annotation, e.g. `let {}: {:?} = [];`.",
+                                    "Cannot infer type of empty vector. Consider adding a type annotation, e.g. `let {}: {} = [];`.",
                                     identifier.value,
                                     Type::Vector(Box::new(Type::I64))
                                 ),
@@ -118,7 +123,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             return Err(Box::new(CompilerError::expected_found(
                                 ErrorSeverity::HIGH,
                                 format!("Cannot assign value to variable '{}'.", identifier.value),
-                                format!("{:?}", resolved_var_type),
+                                format!("{}", resolved_var_type),
                                 "empty vector".to_string(),
                                 span,
                             )));
@@ -127,7 +132,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         let llvm_type = LlvmValue::type_to_basic_type_enum(&resolved_var_type, self.context).ok_or_else(|| {
                             Box::new(CompilerError::at(
                                 ErrorSeverity::HIGH,
-                                format!("Compiling declarations of type '{:?}' is not yet supported.", resolved_var_type),
+                                format!("Compiling declarations of type '{}' is not yet supported.", resolved_var_type),
                                 span,
                             )) as Box<dyn IError>
                         })?;
@@ -143,28 +148,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .build_store(ptr, vector_ptr)
                             .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
 
-                        self.variables.insert(identifier.value.clone(), (ptr, resolved_var_type.clone()));
+                        self.declare_scoped_variable(identifier.value.clone(), ptr, resolved_var_type);
 
                         return Ok(());
                     } else {
                         self.visit_expression(value)?;
 
                         let init_value = self.read_last_value()?;
-                        let resolved_type = init_value.to_type();
+                        let resolved_type = self.resolve_type(&init_value.to_type());
 
                         let final_type = match var_type {
                             Some(var_type) => {
-                                if !var_type.value.is_compatible(&resolved_type) {
+                                let resolved_var_type = self.resolve_type(&var_type.value);
+                                if !resolved_var_type.is_compatible(&resolved_type) {
                                     return Err(Box::new(CompilerError::expected_found(
                                         ErrorSeverity::HIGH,
                                         format!("Cannot assign value to variable '{}'.", identifier.value),
-                                        format!("{:?}", var_type.value),
-                                        format!("{:?}", resolved_type),
+                                        format!("{}", resolved_var_type),
+                                        format!("{}", resolved_type),
                                         span,
                                     )));
                                 }
 
-                                var_type.value.clone()
+                                resolved_var_type.clone()
                             }
 
                             None => {
@@ -180,12 +186,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             }
                         };
 
-                        let init_value = if let LlvmValue::Str(str_ptr) = &init_value {
-                            let copied = self.build_string_copy(*str_ptr, span)?;
-                            LlvmValue::Str(copied)
-                        } else {
-                            init_value
-                        };
+                        let init_value = self.finalize_owned_value_for_new_slot(init_value, &value.value, span)?;
 
                         (final_type, init_value)
                     };
@@ -193,7 +194,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let llvm_type = LlvmValue::type_to_basic_type_enum(&final_type, self.context).ok_or_else(|| {
                         Box::new(CompilerError::at(
                             ErrorSeverity::HIGH,
-                            format!("Compiling declarations of type '{:?}' is not yet supported.", final_type),
+                            format!("Compiling declarations of type '{}' is not yet supported.", final_type),
                             span,
                         )) as Box<dyn IError>
                     })?;
@@ -207,7 +208,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .build_store(ptr, init_value.as_basic_value_enum())
                         .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
 
-                    self.variables.insert(identifier.value.clone(), (ptr, final_type));
+                    self.declare_scoped_variable(identifier.value.clone(), ptr, final_type);
 
                     Ok(())
                 }
@@ -224,13 +225,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.visit_expression(value)?;
 
                     let new_value = self.read_last_value()?;
+                    let new_value = self.finalize_owned_value_for_new_slot(new_value, &value.value, span)?;
 
-                    let new_value = if let LlvmValue::Str(str_ptr) = &new_value {
-                        let copied = self.build_string_copy(*str_ptr, span)?;
-                        LlvmValue::Str(copied)
-                    } else {
-                        new_value
-                    };
+                    // The variable is about to be overwritten: release
+                    // whatever it currently owns first.
+                    self.release_current_value(var_ptr, &var_type, span)?;
 
                     self.builder
                         .build_store(var_ptr, new_value.as_basic_value_enum())
@@ -249,6 +248,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 let (element_ptr, element_type) = self.resolve_indexed_element(vector_ptr, &var_type, accessors, span)?;
 
+                // The slot being overwritten currently holds a live
+                // reference (owned by the containing vector/struct) -
+                // release it before storing the new value.
+                self.release_current_value(element_ptr, &element_type, span)?;
+
                 self.visit_expression(value)?;
 
                 let new_value = self.read_last_value()?;
@@ -257,7 +261,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     return Err(Box::new(CompilerError::at(
                         ErrorSeverity::HIGH,
                         format!(
-                            "Type mismatch in indexed assignment: expected '{:?}', got '{:?}'.",
+                            "Type mismatch in indexed assignment: expected '{}', got '{}'.",
                             element_type,
                             new_value.to_type()
                         ),
@@ -265,12 +269,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     )));
                 }
 
-                let new_value = if let LlvmValue::Str(str_ptr) = &new_value {
-                    let copied = self.build_string_copy(*str_ptr, span)?;
-                    LlvmValue::Str(copied)
-                } else {
-                    new_value
-                };
+                let new_value = self.finalize_owned_value_for_new_slot(new_value, &value.value, span)?;
 
                 self.builder
                     .build_store(element_ptr, new_value.as_basic_value_enum())
@@ -287,9 +286,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             } => {
                 let function = self.current_function();
 
+                // The loop's own declaration (if any) lives in a scope that
+                // spans the whole loop; break/continue must release
+                // everything opened from here on, down to and including
+                // the per-iteration body scope.
+                self.push_scope();
+
                 if let Some(decl) = declaration {
                     self.visit_statement(decl)?;
                 }
+
+                let scope_depth = self.scopes.len();
 
                 let cond_block = self.context.append_basic_block(function, "for.cond");
 
@@ -318,6 +325,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.control_stack.push(ControlFrame::Loop {
                     continue_block,
                     break_block: after_block,
+                    scope_depth,
                 });
 
                 self.visit_block(block)?;
@@ -335,6 +343,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.branch_if_no_terminator(cond_block, span)?;
 
                 self.builder.position_at_end(after_block);
+
+                self.pop_scope_and_release(span)?;
 
                 Ok(())
             }
@@ -393,6 +403,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Statement::WhileLoop { condition, block } => {
                 let function = self.current_function();
 
+                let scope_depth = self.scopes.len();
+
                 let cond_block = self.context.append_basic_block(function, "while.cond");
 
                 let body_block = self.context.append_basic_block(function, "while.block");
@@ -418,6 +430,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.control_stack.push(ControlFrame::Loop {
                     continue_block: cond_block,
                     break_block: after_block,
+                    scope_depth,
                 });
 
                 self.visit_block(block)?;
@@ -438,12 +451,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                         let return_value = self.read_last_value()?;
 
+                        // Protect the returned value from the scope release
+                        // below: if it's a bare variable read, it aliases a
+                        // local that's about to be released, so retain it
+                        // first to keep it alive across that release. Any
+                        // other expression already evaluates to an owned +1
+                        // reference not aliased by a local, so no extra
+                        // retain is needed there.
+                        if return_value.is_refcounted() && Self::expr_needs_retain(&expr.value) {
+                            self.retain_value(&return_value, span)?;
+                        }
+
+                        self.release_all_scopes(span)?;
+
                         self.builder
                             .build_return(Some(&return_value.as_basic_value_enum()))
                             .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
                     }
 
                     None => {
+                        self.release_all_scopes(span)?;
+
                         self.builder
                             .build_return(None)
                             .map_err(|err| Box::new(CompilerError::at(ErrorSeverity::HIGH, err.to_string(), span)) as Box<dyn IError>)?;
@@ -454,7 +482,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             Statement::Break => {
-                let target = self.find_break_target(span)?;
+                let (target, scope_depth) = self.find_break_target(span)?;
+
+                self.release_scopes_from(scope_depth, span)?;
 
                 self.branch_if_no_terminator(target, span)?;
 
@@ -462,7 +492,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             Statement::Continue => {
-                let target = self.find_continue_target(span)?;
+                let (target, scope_depth) = self.find_continue_target(span)?;
+
+                self.release_scopes_from(scope_depth, span)?;
 
                 self.branch_if_no_terminator(target, span)?;
 
@@ -470,6 +502,61 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             Statement::Switch { expressions, cases } => self.compile_switch(expressions, cases),
+        }
+    }
+
+    /// Loads whatever `ptr` (of type `ty`) currently holds and releases it,
+    /// if it's an owned heap value. Used right before overwriting a
+    /// variable or an indexed slot.
+    fn release_current_value(&mut self, ptr: inkwell::values::PointerValue<'ctx>, ty: &Type, span: Span) -> Result<(), Box<dyn IError>> {
+        if !matches!(ty, Type::Str | Type::Vector(_) | Type::Struct { .. }) {
+            return Ok(());
+        }
+
+        let err = Self::builder_err(span);
+
+        let llvm_type = LlvmValue::type_to_basic_type_enum(ty, self.context).ok_or_else(|| {
+            Box::new(CompilerError::at(
+                ErrorSeverity::HIGH,
+                format!("Compiling values of type '{}' is not yet supported.", ty),
+                span,
+            )) as Box<dyn IError>
+        })?;
+
+        let current_raw = self.builder.build_load(llvm_type, ptr, "release.current").map_err(&err)?;
+        let current_value = LlvmValue::from_basic_value_enum(current_raw, ty);
+
+        self.release_value(&current_value, span)
+    }
+
+    /// Prepares a freshly-evaluated value to be stored into a brand new
+    /// owning slot (a variable, a struct field, a vector element, ...):
+    /// strings are always deep-copied, and Vector/Struct values are
+    /// retained only if `source_expr` was a bare variable read (see
+    /// `expr_needs_retain`).
+    pub(in crate::backend) fn finalize_owned_value_for_new_slot(
+        &mut self,
+        value: LlvmValue<'ctx>,
+        source_expr: &Expression,
+        span: Span,
+    ) -> Result<LlvmValue<'ctx>, Box<dyn IError>> {
+        match value {
+            LlvmValue::Str(ptr) => {
+                let copied = self.build_string_copy(ptr, span)?;
+                if Self::expr_needs_release(source_expr) {
+                    self.release_value(&value, span)?;
+                }
+                Ok(LlvmValue::Str(copied))
+            }
+
+            LlvmValue::Vector(_, _) | LlvmValue::Struct(_, _) => {
+                if Self::expr_needs_retain(source_expr) {
+                    self.retain_value(&value, span)?;
+                }
+                Ok(value)
+            }
+
+            other => Ok(other),
         }
     }
 }

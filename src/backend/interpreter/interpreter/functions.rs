@@ -31,7 +31,7 @@ impl<'a> Interpreter<'a> {
     pub(in crate::backend::interpreter::interpreter) fn call_function(
         &mut self,
         identifier: &Node<String>,
-        arguments: &'a Vec<Box<Node<Argument>>>,
+        arguments: &'a [Box<Node<Argument>>],
         span: Span,
     ) -> Result<(), Box<dyn IError>> {
         let name = identifier.value.as_str();
@@ -186,8 +186,8 @@ impl<'a> Interpreter<'a> {
                 return Err(Box::new(InterpreterError::expected_found(
                     ErrorSeverity::HIGH,
                     format!("Function '{}' parameter '{}': wrong argument type.", name, param_name),
-                    format!("{:?}", desired_type),
-                    format!("{:?}", value.borrow().to_type()),
+                    format!("{}", desired_type),
+                    format!("{}", value.borrow().to_type()),
                     parameter.span,
                 )));
             }
@@ -250,8 +250,8 @@ impl<'a> Interpreter<'a> {
                 return Err(Box::new(InterpreterError::expected_found(
                     ErrorSeverity::HIGH,
                     format!("Bad return type from function '{}'.", name),
-                    format!("{:?}", expected_return_type),
-                    format!("{:?}", result_type),
+                    format!("{}", expected_return_type),
+                    format!("{}", result_type),
                     function_declaration.return_type.span,
                 )));
             }

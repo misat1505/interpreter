@@ -17,10 +17,11 @@ use crate::backend::llvm::llvm_alu::llvm_value::LlvmValue;
 use crate::common::errors::{CompilerError, ErrorSeverity, IError};
 use crate::common::span::Span;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OverflowPolicy {
     /// Default. No extra checks are generated - truncating casts silently
     /// wrap. Zero runtime cost.
+    #[default]
     Ignore,
     /// Emits a runtime check before truncating casts; if the value doesn't
     /// fit, prints a warning to stderr and continues with the wrapped value.
@@ -38,12 +39,6 @@ impl OverflowPolicy {
             OverflowPolicy::Warn => ErrorSeverity::LOW,
             OverflowPolicy::Error => ErrorSeverity::HIGH,
         }
-    }
-}
-
-impl Default for OverflowPolicy {
-    fn default() -> Self {
-        OverflowPolicy::Ignore
     }
 }
 
@@ -69,7 +64,7 @@ impl LlvmAlu {
         Box::new(CompilerError::at(
             ErrorSeverity::HIGH,
             format!(
-                "Cannot perform {} between values of type '{:?}' and '{:?}'.",
+                "Cannot perform {} between values of type '{}' and '{}'.",
                 op_name,
                 left.to_type(),
                 right.to_type()
@@ -81,12 +76,13 @@ impl LlvmAlu {
     pub(in crate::backend::llvm::llvm_alu) fn unary_type_error<'ctx>(op_name: &str, value: LlvmValue<'ctx>, span: Span) -> Box<dyn IError> {
         Box::new(CompilerError::at(
             ErrorSeverity::HIGH,
-            format!("Cannot perform {} on type '{:?}'.", op_name, value.to_type()),
+            format!("Cannot perform {} on type '{}'.", op_name, value.to_type()),
             span,
         ))
     }
 
     #[allow(dead_code)]
+    #[allow(clippy::too_many_arguments)]
     fn emit_overflow_check<'ctx>(
         &self,
         builder: &Builder<'ctx>,

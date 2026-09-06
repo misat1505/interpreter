@@ -32,7 +32,7 @@ fn format_signed_integers() {
         (Type::I64, LlvmValue::I64(context.i64_type().const_int(7, true))),
     ];
     for (ty, val) in cases {
-        assert!(compiler.format_scalar_to_cstring(val, &ty, span()).is_ok(), "failed for {:?}", ty);
+        assert!(compiler.format_scalar_to_cstring(val, &ty, span()).is_ok(), "failed for {}", ty);
     }
 }
 
@@ -49,7 +49,7 @@ fn format_unsigned_integers() {
         (Type::U64, LlvmValue::U64(context.i64_type().const_int(7, false))),
     ];
     for (ty, val) in cases {
-        assert!(compiler.format_scalar_to_cstring(val, &ty, span()).is_ok(), "failed for {:?}", ty);
+        assert!(compiler.format_scalar_to_cstring(val, &ty, span()).is_ok(), "failed for {}", ty);
     }
 }
 

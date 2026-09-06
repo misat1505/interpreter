@@ -94,10 +94,10 @@ impl<L: ILexer> Parser<L> {
         let brace_close_token = self.consume_must_be(TokenCategory::BraceClose)?;
 
         Ok(Node {
-            span: Span::new(start.clone(), brace_close_token.span.end().clone()),
+            span: Span::new(start, brace_close_token.span.end()),
             value: Expression::StructLiteral(Node {
                 value: StructLiteral { identifier, fields },
-                span: Span::new(start.clone(), brace_close_token.span.end().clone()),
+                span: Span::new(start, brace_close_token.span.end()),
             }),
         })
     }
@@ -138,7 +138,7 @@ impl<L: ILexer> Parser<L> {
                 value: StructLiteralField { identifier, value },
             }))
         } else {
-            let span = identifier.span.clone();
+            let span = identifier.span;
 
             Ok(Some(Node {
                 span,

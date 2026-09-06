@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc, vec};
 use inkwell::AddressSpace;
 
 use crate::{
+    backend::llvm::llvm_alu::llvm_value::{VEC_CAPACITY, VEC_DATA, VEC_LENGTH},
     backend::{
         interpreter::Value,
         llvm::LlvmValue,
@@ -27,7 +28,7 @@ pub fn vector_push() -> StdFunction {
 
         let mut actual_types: Vec<Type> = vec![];
 
-        if let (Some(vector), Some(value)) = (params.get(0), params.get(1)) {
+        if let (Some(vector), Some(value)) = (params.first(), params.get(1)) {
             actual_types.push(vector.borrow().to_type());
             actual_types.push(value.borrow().to_type());
 
@@ -64,10 +65,10 @@ pub fn vector_push() -> StdFunction {
             if inner.is_compatible(value_type) {
                 Ok(Type::Void)
             } else {
-                Err(format!("vector_push expected element of type '{:?}', but got '{:?}'.", inner, value_type))
+                Err(format!("vector_push expected element of type '{}', but got '{}'.", inner, value_type))
             }
         }
-        [other, _] => Err(format!("vector_push expected a vector as first argument, but got '{:?}'.", other)),
+        [other, _] => Err(format!("vector_push expected a vector as first argument, but got '{}'.", other)),
         _ => Err(String::from("vector_push expects exactly 2 arguments.")),
     };
 
@@ -82,7 +83,7 @@ pub fn vector_push() -> StdFunction {
             )) as Box<dyn IError>
         };
 
-        let vector_arg = arguments.get(0).ok_or_else(err_arity)?;
+        let vector_arg = arguments.first().ok_or_else(err_arity)?;
         let value_arg = arguments.get(1).ok_or_else(err_arity)?;
 
         let vector_slot_ptr = compiler.resolve_reference(&vector_arg.value.value)?;
@@ -97,11 +98,15 @@ pub fn vector_push() -> StdFunction {
             other => {
                 return Err(Box::new(CompilerError::at(
                     ErrorSeverity::HIGH,
-                    format!("'vector_push' expects a vector, got '{:?}'.", other),
+                    format!("'vector_push' expects a vector, got '{}'.", other),
                     span,
                 )))
             }
         };
+
+        if crate::backend::llvm::compiler::Compiler::expr_needs_release(&vector_arg.value.value.value) {
+            compiler.release_value(&vector_value, span)?;
+        }
 
         compiler.visit_expression(&value_arg.value.value)?;
         let pushed_value = compiler.read_last_value()?;
@@ -110,13 +115,15 @@ pub fn vector_push() -> StdFunction {
             return Err(Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 format!(
-                    "Vector element type mismatch: expected '{:?}', got '{:?}'.",
+                    "Vector element type mismatch: expected '{}', got '{}'.",
                     inner_type,
                     pushed_value.to_type()
                 ),
                 span,
             )));
         }
+
+        let pushed_value = compiler.finalize_owned_value_for_new_slot(pushed_value, &value_arg.value.value.value, span)?;
 
         let context = compiler.context();
         let ptr_type = context.ptr_type(AddressSpace::default());
@@ -138,17 +145,17 @@ pub fn vector_push() -> StdFunction {
 
         let data_field = compiler
             .builder()
-            .build_struct_gep(struct_type, struct_ptr, 0, "vector.data")
+            .build_struct_gep(struct_type, struct_ptr, VEC_DATA, "vector.data")
             .map_err(err)?;
 
         let length_field = compiler
             .builder()
-            .build_struct_gep(struct_type, struct_ptr, 1, "vector.length")
+            .build_struct_gep(struct_type, struct_ptr, VEC_LENGTH, "vector.length")
             .map_err(err)?;
 
         let capacity_field = compiler
             .builder()
-            .build_struct_gep(struct_type, struct_ptr, 2, "vector.capacity")
+            .build_struct_gep(struct_type, struct_ptr, VEC_CAPACITY, "vector.capacity")
             .map_err(err)?;
 
         let old_length = compiler
@@ -166,7 +173,7 @@ pub fn vector_push() -> StdFunction {
         let element_llvm_type = LlvmValue::type_to_basic_type_enum(&inner_type, context).ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
-                format!("Compiling vectors of type '{:?}' is not yet supported. 7", inner_type),
+                format!("Compiling vectors of type '{}' is not yet supported. 7", inner_type),
                 span,
             )) as Box<dyn IError>
         })?;

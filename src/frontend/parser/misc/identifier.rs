@@ -23,7 +23,7 @@ impl<L: ILexer> Parser<L> {
             ErrorSeverity::HIGH,
             "Wrong token value type".to_string(),
             "str".to_string(),
-            format!("{:?}", token.category),
+            format!("{}", token.category),
             token.span,
         )))
     }

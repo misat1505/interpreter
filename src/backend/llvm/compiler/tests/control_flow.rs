@@ -54,10 +54,11 @@ fn find_break_target_from_loop() {
     compiler.control_stack.push(ControlFrame::Loop {
         continue_block: cont,
         break_block: brk,
+        scope_depth: 1,
     });
 
     let found = compiler.find_break_target(span()).unwrap();
-    assert_eq!(found, brk);
+    assert_eq!(found, (brk, 1));
 }
 
 #[test]
@@ -69,10 +70,13 @@ fn find_break_target_from_switch() {
     let function = compiler.main_fn.unwrap();
     let after = context.append_basic_block(function, "after");
 
-    compiler.control_stack.push(ControlFrame::Switch { break_block: after });
+    compiler.control_stack.push(ControlFrame::Switch {
+        break_block: after,
+        scope_depth: 1,
+    });
 
     let found = compiler.find_break_target(span()).unwrap();
-    assert_eq!(found, after);
+    assert_eq!(found, (after, 1));
 }
 
 #[test]
@@ -89,11 +93,15 @@ fn find_break_target_prefers_innermost() {
     compiler.control_stack.push(ControlFrame::Loop {
         continue_block: cont,
         break_block: outer_brk,
+        scope_depth: 1,
     });
-    compiler.control_stack.push(ControlFrame::Switch { break_block: inner_brk });
+    compiler.control_stack.push(ControlFrame::Switch {
+        break_block: inner_brk,
+        scope_depth: 1,
+    });
 
     let found = compiler.find_break_target(span()).unwrap();
-    assert_eq!(found, inner_brk);
+    assert_eq!(found, (inner_brk, 1));
 }
 
 #[test]
@@ -119,10 +127,11 @@ fn find_continue_target_from_loop() {
     compiler.control_stack.push(ControlFrame::Loop {
         continue_block: cont,
         break_block: brk,
+        scope_depth: 1,
     });
 
     let found = compiler.find_continue_target(span()).unwrap();
-    assert_eq!(found, cont);
+    assert_eq!(found, (cont, 1));
 }
 
 #[test]
@@ -139,12 +148,16 @@ fn find_continue_target_skips_switch() {
     compiler.control_stack.push(ControlFrame::Loop {
         continue_block: cont,
         break_block: brk,
+        scope_depth: 1,
     });
-    compiler.control_stack.push(ControlFrame::Switch { break_block: after });
+    compiler.control_stack.push(ControlFrame::Switch {
+        break_block: after,
+        scope_depth: 1,
+    });
 
     // switch is ignored; loop's continue is found
     let found = compiler.find_continue_target(span()).unwrap();
-    assert_eq!(found, cont);
+    assert_eq!(found, (cont, 1));
 }
 
 #[test]
@@ -156,7 +169,10 @@ fn find_continue_target_outside_loop_fails() {
     // only a switch on the stack
     let function = compiler.main_fn.unwrap();
     let after = context.append_basic_block(function, "after");
-    compiler.control_stack.push(ControlFrame::Switch { break_block: after });
+    compiler.control_stack.push(ControlFrame::Switch {
+        break_block: after,
+        scope_depth: 1,
+    });
 
     let err = compiler.find_continue_target(span()).unwrap_err();
     assert!(err.message().contains("continue"));

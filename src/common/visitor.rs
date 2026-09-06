@@ -16,6 +16,6 @@ pub trait Visitor<'a> {
     fn visit_switch_expression(&mut self, switch_expression: &'a Node<SwitchExpression>) -> Result<(), Box<dyn IError>>;
     fn visit_switch_case(&mut self, switch_case: &'a Node<SwitchCase>) -> Result<(), Box<dyn IError>>;
     fn visit_literal(&mut self, literal: &'a Literal) -> Result<(), Box<dyn IError>>;
-    fn visit_vector_literal(&mut self, vector: &'a Vec<Box<Node<Expression>>>) -> Result<(), Box<dyn IError>>;
-    fn visit_variable(&mut self, variable: &'a String, span: Span) -> Result<(), Box<dyn IError>>;
+    fn visit_vector_literal(&mut self, vector: &'a [Box<Node<Expression>>]) -> Result<(), Box<dyn IError>>;
+    fn visit_variable(&mut self, variable: &'a str, span: Span) -> Result<(), Box<dyn IError>>;
 }

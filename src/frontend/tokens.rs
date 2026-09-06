@@ -1,8 +1,8 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use crate::common::span::Span;
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenCategory {
     // Comparison
     Greater,
@@ -85,7 +85,7 @@ pub enum TokenCategory {
     Dot,
 }
 
-impl Debug for TokenCategory {
+impl Display for TokenCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenCategory::*;
 

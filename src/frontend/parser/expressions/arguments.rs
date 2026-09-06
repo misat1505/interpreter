@@ -17,7 +17,7 @@ impl<L: ILexer> Parser<L> {
         };
 
         let mut arguments = vec![expression];
-        while let Some(_) = self.consume_if_matches(TokenCategory::Comma)? {
+        while self.consume_if_matches(TokenCategory::Comma)?.is_some() {
             let argument = self
                 .parse_argument()?
                 .ok_or_else(|| self.create_parser_error(String::from("Couldn't create argument while parsing arguments.")))?;

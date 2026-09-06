@@ -59,7 +59,7 @@ impl TypeALU {
             // Everything else
             (value, target_type) => Err(SemanticCheckerError::new(
                 ErrorSeverity::HIGH,
-                format!("Cannot cast '{:?}' to '{:?}'.", value, target_type),
+                format!("Cannot cast '{}' to '{}'.", value, target_type),
                 span,
             )),
         }

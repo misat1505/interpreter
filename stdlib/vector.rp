@@ -1,0 +1,670 @@
+# ============================================================
+# Raptor Standard Library
+# vector.rp
+# TODO: all of these methods will be generated with macros
+# ============================================================
+
+# ============================================================
+# str[]
+# ============================================================
+
+fn str_vector_is_empty(&str[] values): bool {
+    return vector_size(&values) == 0;
+}
+
+fn str_vector_contains(&str[] values, str value): bool {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn str_vector_index_of(&str[] values, str value): i64 {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+fn str_vector_last_index_of(&str[] values, str value): i64 {
+    for (let i = vector_size(&values) - 1; i >= 0; i -= 1) {
+        if (values[i] == value) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+fn str_vector_first(&str[] values): str {
+    if (vector_size(&values) == 0) return "";
+    return values[0];
+}
+
+fn str_vector_last(&str[] values): str {
+    if (vector_size(&values) == 0) return "";
+    return values[vector_size(&values) - 1];
+}
+
+fn str_vector_reverse(&str[] values): str[] {
+    let result: str[] = [];
+
+    for (let i = vector_size(&values) - 1; i >= 0; i -= 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_copy(&str[] values): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_remove_at(&str[] values, i64 index): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (i != index) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn str_vector_insert_at(
+    &str[] values,
+    i64 index,
+    str value
+): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (i == index) {
+            vector_push(&result, value);
+        }
+
+        vector_push(&result, values[i]);
+    }
+
+    if (index >= vector_size(&values)) {
+        vector_push(&result, value);
+    }
+
+    return result;
+}
+
+fn str_vector_concat(
+    &str[] a,
+    &str[] b
+): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&a); i += 1) {
+        vector_push(&result, a[i]);
+    }
+
+    for (let i = 0; i < vector_size(&b); i += 1) {
+        vector_push(&result, b[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_take(&str[] values, i64 count): str[] {
+    let result: str[] = [];
+
+    if (count <= 0) return result;
+
+    if (count > vector_size(&values)) {
+        count = vector_size(&values);
+    }
+
+    for (let i = 0; i < count; i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_skip(&str[] values, i64 count): str[] {
+    let result: str[] = [];
+
+    if (count < 0) count = 0;
+    if (count > vector_size(&values)) {
+        count = vector_size(&values);
+    }
+
+    for (let i = count; i < vector_size(&values); i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_slice(
+    &str[] values,
+    i64 start,
+    i64 end
+): str[] {
+    let result: str[] = [];
+
+    if (start < 0) start = 0;
+    if (end > vector_size(&values)) {
+        end = vector_size(&values);
+    }
+
+    if (start >= end) return result;
+
+    for (let i = start; i < end; i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn str_vector_join(
+    &str[] values,
+    str separator
+): str {
+    let result = "";
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (i != 0) {
+            result += separator;
+        }
+
+        result += values[i];
+    }
+
+    return result;
+}
+
+fn str_vector_count(
+    &str[] values,
+    str value
+): i64 {
+    let count = 0;
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) {
+            count += 1;
+        }
+    }
+
+    return count;
+}
+
+fn str_vector_remove_value(
+    &str[] values,
+    str value
+): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] != value) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn str_vector_distinct(&str[] values): str[] {
+    let result: str[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (!str_vector_contains(&result, values[i])) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn str_vector_concat_all(&str[] values): str {
+    return str_vector_join(&values, "");
+}
+
+# ============================================================
+# i64[]
+# ============================================================
+
+fn i64_vector_is_empty(&i64[] values): bool {
+    return vector_size(&values) == 0;
+}
+
+fn i64_vector_contains(&i64[] values, i64 value): bool {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) return true;
+    }
+
+    return false;
+}
+
+fn i64_vector_index_of(&i64[] values, i64 value): i64 {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) return i;
+    }
+
+    return -1;
+}
+
+fn i64_vector_last_index_of(&i64[] values, i64 value): i64 {
+    for (let i = vector_size(&values) - 1; i >= 0; i -= 1) {
+        if (values[i] == value) return i;
+    }
+
+    return -1;
+}
+
+fn i64_vector_first(&i64[] values): i64 {
+    if (vector_size(&values) == 0) return 0;
+    return values[0];
+}
+
+fn i64_vector_last(&i64[] values): i64 {
+    if (vector_size(&values) == 0) return 0;
+    return values[vector_size(&values) - 1];
+}
+
+fn i64_vector_sum(&i64[] values): i64 {
+    let result = 0;
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        result += values[i];
+    }
+
+    return result;
+}
+
+fn i64_vector_min(&i64[] values): i64 {
+    if (vector_size(&values) == 0) return 0;
+
+    let result = values[0];
+
+    for (let i = 1; i < vector_size(&values); i += 1) {
+        if (values[i] < result) {
+            result = values[i];
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_max(&i64[] values): i64 {
+    if (vector_size(&values) == 0) return 0;
+
+    let result = values[0];
+
+    for (let i = 1; i < vector_size(&values); i += 1) {
+        if (values[i] > result) {
+            result = values[i];
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_average(&i64[] values): f64 {
+    if (vector_size(&values) == 0) return 0.0;
+
+    return i64_vector_sum(&values) as f64 / vector_size(&values) as f64;
+}
+
+fn i64_vector_reverse(&i64[] values): i64[] {
+    let result: i64[] = [];
+
+    for (let i = vector_size(&values) - 1; i >= 0; i -= 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn i64_vector_copy(&i64[] values): i64[] {
+    let result: i64[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn i64_vector_remove_at(
+    &i64[] values,
+    i64 index
+): i64[] {
+    let result: i64[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (i != index) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_remove_value(
+    &i64[] values,
+    i64 value
+): i64[] {
+    let result: i64[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] != value) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_count(
+    &i64[] values,
+    i64 value
+): i64 {
+    let count = 0;
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) {
+            count += 1;
+        }
+    }
+
+    return count;
+}
+
+fn i64_vector_distinct(
+    &i64[] values
+): i64[] {
+    let result: i64[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (!i64_vector_contains(&result, values[i])) {
+            vector_push(&result, values[i]);
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_concat(
+    &i64[] a,
+    &i64[] b
+): i64[] {
+    let result: i64[] = [];
+
+    for (let i = 0; i < vector_size(&a); i += 1) {
+        vector_push(&result, a[i]);
+    }
+
+    for (let i = 0; i < vector_size(&b); i += 1) {
+        vector_push(&result, b[i]);
+    }
+
+    return result;
+}
+
+fn i64_vector_take(
+    &i64[] values,
+    i64 count
+): i64[] {
+    let result: i64[] = [];
+
+    if (count <= 0) return result;
+
+    if (count > vector_size(&values)) {
+        count = vector_size(&values);
+    }
+
+    for (let i = 0; i < count; i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn i64_vector_skip(
+    &i64[] values,
+    i64 count
+): i64[] {
+    let result: i64[] = [];
+
+    if (count < 0) count = 0;
+
+    for (let i = count; i < vector_size(&values); i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+fn i64_vector_slice(
+    &i64[] values,
+    i64 start,
+    i64 end
+): i64[] {
+    let result: i64[] = [];
+
+    if (start < 0) start = 0;
+    if (end > vector_size(&values)) {
+        end = vector_size(&values);
+    }
+
+    if (start >= end) return result;
+
+    for (let i = start; i < end; i += 1) {
+        vector_push(&result, values[i]);
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Sorting
+# ------------------------------------------------------------
+
+fn i64_vector_sort(&i64[] values): i64[] {
+    let result = i64_vector_copy(&values);
+
+    for (let i = 0; i < vector_size(&result); i += 1) {
+        for (let j = 0; j < vector_size(&result) - i - 1; j += 1) {
+            if (result[j] > result[j + 1]) {
+                let temp = result[j];
+                result[j] = result[j + 1];
+                result[j + 1] = temp;
+            }
+        }
+    }
+
+    return result;
+}
+
+fn i64_vector_sort_desc(&i64[] values): i64[] {
+    let result = i64_vector_copy(&values);
+
+    for (let i = 0; i < vector_size(&result); i += 1) {
+        for (let j = 0; j < vector_size(&result) - i - 1; j += 1) {
+            if (result[j] < result[j + 1]) {
+                let temp = result[j];
+                result[j] = result[j + 1];
+                result[j + 1] = temp;
+            }
+        }
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# In-place-ish helpers
+# ------------------------------------------------------------
+
+fn i64_vector_fill(
+    i64 size,
+    i64 value
+): i64[] {
+    let result: i64[] = [];
+
+    if (size <= 0) return result;
+
+    for (let i = 0; i < size; i += 1) {
+        vector_push(&result, value);
+    }
+
+    return result;
+}
+
+fn i64_vector_range(
+    i64 start,
+    i64 end
+): i64[] {
+    let result: i64[] = [];
+
+    for (let i = start; i < end; i += 1) {
+        vector_push(&result, i);
+    }
+
+    return result;
+}
+
+fn i64_vector_range_step(
+    i64 start,
+    i64 end,
+    i64 step
+): i64[] {
+    let result: i64[] = [];
+
+    if (step == 0) return result;
+
+    if (step > 0) {
+        let value = start;
+
+        while (value < end) {
+            vector_push(&result, value);
+            value += step;
+        }
+    } else {
+        let value = start;
+
+        while (value > end) {
+            vector_push(&result, value);
+            value += step;
+        }
+    }
+
+    return result;
+}
+
+# ============================================================
+# bool[]
+# ============================================================
+
+fn bool_vector_contains(
+    &bool[] values,
+    bool value
+): bool {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) return true;
+    }
+
+    return false;
+}
+
+fn bool_vector_all(
+    &bool[] values,
+    bool expected
+): bool {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] != expected) return false;
+    }
+
+    return true;
+}
+
+fn bool_vector_any(
+    &bool[] values,
+    bool expected
+): bool {
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == expected) return true;
+    }
+
+    return false;
+}
+
+fn bool_vector_count(
+    &bool[] values,
+    bool value
+): i64 {
+    let count = 0;
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        if (values[i] == value) {
+            count += 1;
+        }
+    }
+
+    return count;
+}
+
+fn bool_vector_negate(
+    &bool[] values
+): bool[] {
+    let result: bool[] = [];
+
+    for (let i = 0; i < vector_size(&values); i += 1) {
+        vector_push(&result, !values[i]);
+    }
+
+    return result;
+}
+
+# ============================================================
+# Generic-style helpers for concrete vectors
+# ============================================================
+
+fn i64_vector_reverse_in_place(
+    &i64[] values
+): void {
+    let left = 0;
+    let right = vector_size(&values) - 1;
+
+    while (left < right) {
+        let temp = values[left];
+        values[left] = values[right];
+        values[right] = temp;
+
+        left += 1;
+        right -= 1;
+    }
+}
+
+fn i64_vector_swap(
+    &i64[] values,
+    i64 a,
+    i64 b
+): void {
+    if (a < 0 || b < 0) return;
+    if (a >= vector_size(&values)) return;
+    if (b >= vector_size(&values)) return;
+
+    let temp = values[a];
+    values[a] = values[b];
+    values[b] = temp;
+}

@@ -1,8 +1,11 @@
 use std::{cell::RefCell, fs, rc::Rc, vec};
 
+use inkwell::AddressSpace;
+
 use crate::{
     backend::{
         interpreter::Value,
+        llvm::{compiler::Compiler, LlvmValue},
         std_functions::std_functions::{build_usage_error, LlvmCompileFn, StdFunction},
     },
     common::{
@@ -16,12 +19,13 @@ use crate::{
 
 pub fn delete_file() -> StdFunction {
     let params = vec![Type::Str];
+
     let execute = |params: &Vec<Rc<RefCell<Value>>>, span: Span| -> Result<Option<Value>, StdFunctionError> {
         let fn_name = "delete_file";
         let expected_types = vec![Type::Str];
         let mut actual_types: Vec<Type> = vec![];
 
-        if let Some(filepath) = params.get(0) {
+        if let Some(filepath) = params.first() {
             actual_types.push(filepath.borrow().to_type());
             let filepath = filepath.borrow();
 
@@ -40,7 +44,7 @@ pub fn delete_file() -> StdFunction {
     let compile: LlvmCompileFn = |compiler, arguments, span| {
         let err = |e: inkwell::builder::BuilderError| Box::new(CompilerError::at(ErrorSeverity::HIGH, e.to_string(), span)) as Box<dyn IError>;
 
-        let arg = arguments.get(0).ok_or_else(|| {
+        let arg = arguments.first().ok_or_else(|| {
             Box::new(CompilerError::at(
                 ErrorSeverity::HIGH,
                 String::from("'delete_file' expects exactly one argument."),
@@ -49,18 +53,42 @@ pub fn delete_file() -> StdFunction {
         })?;
 
         compiler.visit_expression(&arg.value.value)?;
-        let path_ptr = compiler.read_last_value()?.into_str_value(span)?;
-        let owned_ptr = compiler.build_string_copy(path_ptr, span)?;
+        let path_value = compiler.read_last_value()?;
+
+        let path_ptr = match &path_value {
+            LlvmValue::Str(ptr) => {
+                let i8_type = compiler.context().i8_type();
+                let i8_ptr_type = compiler.context().ptr_type(AddressSpace::default());
+
+                let data_field = unsafe {
+                    compiler
+                        .builder()
+                        .build_gep(i8_type, *ptr, &[compiler.context().i64_type().const_int(8, false)], "path.data.field")
+                }
+                .map_err(err)?;
+
+                compiler
+                    .builder()
+                    .build_load(i8_ptr_type, data_field, "path.data")
+                    .map_err(err)?
+                    .into_pointer_value()
+            }
+            other => {
+                return Err(Box::new(CompilerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("'delete_file' expects a string, got '{}'.", other.to_type()),
+                    span,
+                )));
+            }
+        };
 
         let remove_fn = compiler.libc().remove_fn;
-        compiler
-            .builder()
-            .build_call(remove_fn, &[owned_ptr.into()], "remove.call")
-            .map_err(err)?;
 
-        let free_fn = compiler.libc().free_fn;
+        compiler.builder().build_call(remove_fn, &[path_ptr.into()], "remove.call").map_err(err)?;
 
-        compiler.builder().build_call(free_fn, &[owned_ptr.into()], "free.path").map_err(err)?;
+        if Compiler::expr_needs_release_in_function_call(&arg.value.value.value) {
+            compiler.release_value(&path_value, arg.value.value.span)?;
+        }
 
         Ok(())
     };

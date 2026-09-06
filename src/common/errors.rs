@@ -141,7 +141,7 @@ pub struct ErrorsManager;
 impl ErrorsManager {
     #[allow(dead_code)]
     pub fn append_position(mut error: Box<dyn IError>, position: Position) -> Box<dyn IError> {
-        error.set_message(format!("{}\nAt {:?}.", error.message(), position));
+        error.set_message(format!("{}\nAt {}.", error.message(), position));
 
         error
     }
@@ -167,6 +167,6 @@ fn severity_color(severity: &ErrorSeverity) -> &'static str {
 
 impl SemanticCheckerError {
     pub fn type_mismatch(level: ErrorSeverity, summary: String, expected: &Type, found: &Type, span: Span) -> Self {
-        Self::expected_found(level, summary, format!("{:?}", expected), format!("{:?}", found), span)
+        Self::expected_found(level, summary, format!("{}", expected), format!("{}", found), span)
     }
 }

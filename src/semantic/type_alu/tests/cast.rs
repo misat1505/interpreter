@@ -128,7 +128,7 @@ fn cast_unsupported_combinations_fail() {
     ];
     for (from, to) in bad {
         let r = TypeALU::cast_to_type(from.clone(), &to, Span::default());
-        assert!(r.is_err(), "expected error for {:?} -> {:?}", from, to);
+        assert!(r.is_err(), "expected error for {} -> {}", from, to);
         let msg = r.err().unwrap().message();
         assert!(msg.starts_with("Cannot cast"), "msg: {}", msg);
     }

@@ -54,7 +54,7 @@ fn cast_to_type_fail() {
     for (val, to_type) in data {
         assert_eq!(
             ALU::cast_to_type(val, &to_type, Span::default()).err().unwrap().message(),
-            format!("Cannot cast String 'abc' to '{:?}'.", to_type)
+            format!("Cannot cast String 'abc' to '{}'.", to_type)
         );
     }
 }
@@ -221,7 +221,7 @@ fn cast_string_to_integer_invalid_fails() {
     ];
     for (s, ty) in cases {
         let r = ALU::cast_to_type(Value::String(s.into()), &ty, Span::default());
-        assert!(r.is_err(), "expected error for '{}' -> {:?}", s, ty);
+        assert!(r.is_err(), "expected error for '{}' -> {}", s, ty);
         let msg = r.err().unwrap().message();
         assert!(msg.contains("Cannot cast String"), "msg was: {}", msg);
     }

@@ -2,7 +2,10 @@ use std::io::BufReader;
 
 use raptor_lib::backend::llvm::OverflowPolicy;
 
-use crate::common::{capture_compiled_output_with_policy, create_interpreter, setup_program, setup_program_skip_typecheck};
+use crate::common::{
+    capture_compiled_output_with_policy, capture_compiled_output_with_policy_no_valgrind, create_interpreter, setup_program,
+    setup_program_skip_typecheck,
+};
 
 // ---------------------------------------------------------------------
 // Compiler (LLVM) — read access, Vector
@@ -41,13 +44,13 @@ println(numbers[1] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
-    assert!(stdout.is_empty(), "program should abort before println, got: {:?}", stdout);
+    assert!(stdout.is_empty(), "program should abort before println, got: {}", stdout);
     assert!(
         stderr.to_lowercase().contains("out of bounds"),
-        "expected out-of-bounds message, got: {:?}",
+        "expected out-of-bounds message, got: {}",
         stderr
     );
 }
@@ -65,7 +68,7 @@ println(numbers[100] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -86,7 +89,7 @@ println(numbers[idx] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -106,7 +109,7 @@ println(numbers[0] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -158,7 +161,7 @@ println(numbers[1] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert_eq!(stdout, "420\n", "the first println should still run before the failing assignment");
@@ -230,7 +233,7 @@ println(text[2] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -251,7 +254,7 @@ println(text[idx] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -271,7 +274,7 @@ println(text[0] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -299,7 +302,7 @@ println(container.items[5] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -325,7 +328,7 @@ println(container.items[0] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert!(stdout.is_empty());
@@ -351,7 +354,7 @@ println(container.items[1] as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_eq!(exit_code, 0);
     assert_eq!(stdout, "99\n");
@@ -377,7 +380,7 @@ println(999 as str);
 
     let program = setup_program(text);
 
-    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy(&program, OverflowPolicy::Ignore);
+    let (stdout, stderr, exit_code) = capture_compiled_output_with_policy_no_valgrind(&program, OverflowPolicy::Ignore);
 
     assert_ne!(exit_code, 0);
     assert_eq!(stdout, "420\n", "execution must stop at the first out-of-bounds access");

@@ -1,0 +1,707 @@
+# ============================================================
+# Raptor Standard Library
+# string.rp
+# ============================================================
+
+# ------------------------------------------------------------
+# Basic
+# ------------------------------------------------------------
+
+fn str_is_empty(str s): bool {
+    return str_len(s) == 0;
+}
+
+fn str_first(str s): char {
+    if (str_len(s) == 0) return '\0';
+    return s[0];
+}
+
+fn str_last(str s): char {
+    let len = str_len(s);
+    if (len == 0) return '\0';
+    return s[len - 1];
+}
+
+fn str_char_at(str s, i64 index): char {
+    if (index < 0) return '\0';
+    if (index >= str_len(s)) return '\0';
+    return s[index];
+}
+
+# ------------------------------------------------------------
+# Substrings / searching
+# ------------------------------------------------------------
+
+fn str_substring(str s, i64 start, i64 end): str {
+    let result = "";
+
+    if (start < 0) start = 0;
+    if (end > str_len(s)) end = str_len(s);
+    if (start >= end) return result;
+
+    for (let i = start; i < end; i += 1) {
+        result += s[i];
+    }
+
+    return result;
+}
+
+fn str_index_of_char(str s, char target): i64 {
+    for (let i = 0; i < str_len(s); i += 1) {
+        if (s[i] == target) return i;
+    }
+
+    return -1;
+}
+
+fn str_last_index_of_char(str s, char target): i64 {
+    for (let i = str_len(s) - 1; i >= 0; i -= 1) {
+        if (s[i] == target) return i;
+    }
+
+    return -1;
+}
+
+fn str_index_of_str(str s, str target): i64 {
+    let s_len = str_len(s);
+    let t_len = str_len(target);
+
+    if (t_len == 0) return 0;
+    if (t_len > s_len) return -1;
+
+    for (let i = 0; i <= s_len - t_len; i += 1) {
+        let matched = true;
+
+        for (let j = 0; j < t_len; j += 1) {
+            if (s[i + j] != target[j]) {
+                matched = false;
+                break;
+            }
+        }
+
+        if (matched) return i;
+    }
+
+    return -1;
+}
+
+fn str_last_index_of_str(str s, str target): i64 {
+    let s_len = str_len(s);
+    let t_len = str_len(target);
+
+    if (t_len == 0) return s_len;
+    if (t_len > s_len) return -1;
+
+    let start = s_len - t_len;
+
+    for (let i = start; i >= 0; i -= 1) {
+        let matched = true;
+
+        for (let j = 0; j < t_len; j += 1) {
+            if (s[i + j] != target[j]) {
+                matched = false;
+                break;
+            }
+        }
+
+        if (matched) return i;
+    }
+
+    return -1;
+}
+
+fn str_contains(str s, str target): bool {
+    return str_index_of_str(s, target) >= 0;
+}
+
+fn str_contains_char(str s, char target): bool {
+    return str_index_of_char(s, target) >= 0;
+}
+
+fn str_starts_with(str s, str prefix): bool {
+    return str_index_of_str(s, prefix) == 0;
+}
+
+fn str_ends_with(str s, str suffix): bool {
+    let s_len = str_len(s);
+    let suffix_len = str_len(suffix);
+
+    if (suffix_len > s_len) return false;
+
+    return str_last_index_of_str(s, suffix) == s_len - suffix_len;
+}
+
+# ------------------------------------------------------------
+# Equality
+# ------------------------------------------------------------
+
+fn str_equals(str a, str b): bool {
+    if (str_len(a) != str_len(b)) return false;
+
+    for (let i = 0; i < str_len(a); i += 1) {
+        if (a[i] != b[i]) return false;
+    }
+
+    return true;
+}
+
+fn str_equals_ignore_case(str a, str b): bool {
+    if (str_len(a) != str_len(b)) return false;
+
+    for (let i = 0; i < str_len(a); i += 1) {
+        if (char_to_lower(a[i]) != char_to_lower(b[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+# ------------------------------------------------------------
+# Character classification
+# ------------------------------------------------------------
+
+fn char_is_digit(char c): bool {
+    return c as u8 >= '0' as u8 && c as u8 <= '9' as u8;
+}
+
+fn char_is_lower(char c): bool {
+    return c as u8 >= 'a' as u8 && c as u8 <= 'z' as u8;
+}
+
+fn char_is_upper(char c): bool {
+    return c as u8 >= 'A' as u8 && c as u8 <= 'Z' as u8;
+}
+
+fn char_is_letter(char c): bool {
+    return char_is_lower(c) || char_is_upper(c);
+}
+
+fn char_is_alphanumeric(char c): bool {
+    return char_is_letter(c) || char_is_digit(c);
+}
+
+fn char_is_whitespace(char c): bool {
+    return c == ' '
+        || c == '\t'
+        || c == '\n'
+        || c == '\r';
+}
+
+fn char_is_hex_digit(char c): bool {
+    return char_is_digit(c)
+        || (c as u8 >= 'a' as u8 && c as u8 <= 'f' as u8)
+        || (c as u8 >= 'A' as u8 && c as u8 <= 'F' as u8);
+}
+
+# ------------------------------------------------------------
+# Character conversion
+# ------------------------------------------------------------
+
+fn char_to_lower(char c): char {
+    if (c as u8 >= 'A' as u8 && c as u8 <= 'Z' as u8) {
+        return (c as u8 + ('a' as u8 - 'A' as u8)) as char;
+    }
+
+    return c;
+}
+
+fn char_to_upper(char c): char {
+    if (c as u8 >= 'a' as u8 && c as u8 <= 'z' as u8) {
+        return (c as u8 - ('a' as u8 - 'A' as u8)) as char;
+    }
+
+    return c;
+}
+
+fn digit_to_char(i64 digit): char {
+    if (digit == 0) return '0';
+    if (digit == 1) return '1';
+    if (digit == 2) return '2';
+    if (digit == 3) return '3';
+    if (digit == 4) return '4';
+    if (digit == 5) return '5';
+    if (digit == 6) return '6';
+    if (digit == 7) return '7';
+    if (digit == 8) return '8';
+    if (digit == 9) return '9';
+
+    return '\0';
+}
+
+fn char_to_digit(char c): i64 {
+    if (c == '0') return 0;
+    if (c == '1') return 1;
+    if (c == '2') return 2;
+    if (c == '3') return 3;
+    if (c == '4') return 4;
+    if (c == '5') return 5;
+    if (c == '6') return 6;
+    if (c == '7') return 7;
+    if (c == '8') return 8;
+    if (c == '9') return 9;
+
+    return -1;
+}
+
+# ------------------------------------------------------------
+# Trim
+# ------------------------------------------------------------
+
+fn str_trim_left(str s): str {
+    let start = 0;
+
+    while (start < str_len(s) && char_is_whitespace(s[start])) {
+        start += 1;
+    }
+
+    return str_substring(s, start, str_len(s));
+}
+
+fn str_trim_right(str s): str {
+    let end = str_len(s);
+
+    while (end > 0 && char_is_whitespace(s[end - 1])) {
+        end -= 1;
+    }
+
+    return str_substring(s, 0, end);
+}
+
+fn str_trim(str s): str {
+    let start = 0;
+    let end = str_len(s);
+
+    while (start < end && char_is_whitespace(s[start])) {
+        start += 1;
+    }
+
+    while (end > start && char_is_whitespace(s[end - 1])) {
+        end -= 1;
+    }
+
+    return str_substring(s, start, end);
+}
+
+# ------------------------------------------------------------
+# Case conversion
+# ------------------------------------------------------------
+
+fn str_to_lower(str s): str {
+    let result = "";
+
+    for (let i = 0; i < str_len(s); i += 1) {
+        result += char_to_lower(s[i]);
+    }
+
+    return result;
+}
+
+fn str_to_upper(str s): str {
+    let result = "";
+
+    for (let i = 0; i < str_len(s); i += 1) {
+        result += char_to_upper(s[i]);
+    }
+
+    return result;
+}
+
+fn str_capitalize(str s): str {
+    if (str_len(s) == 0) return "";
+
+    let result = "";
+    result += char_to_upper(s[0]);
+
+    for (let i = 1; i < str_len(s); i += 1) {
+        result += s[i];
+    }
+
+    return result;
+}
+
+fn str_uncapitalize(str s): str {
+    if (str_len(s) == 0) return "";
+
+    let result = "";
+    result += char_to_lower(s[0]);
+
+    for (let i = 1; i < str_len(s); i += 1) {
+        result += s[i];
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Replace
+# ------------------------------------------------------------
+
+fn str_replace_first(str s, str old, str replacement): str {
+    let index = str_index_of_str(s, old);
+
+    if (index < 0) return s;
+
+    let left = str_substring(s, 0, index);
+    let right = str_substring(
+        s,
+        index + str_len(old),
+        str_len(s)
+    );
+
+    return left + replacement + right;
+}
+
+fn str_replace_all(str s, str old, str replacement): str {
+    if (str_len(old) == 0) return s;
+
+    let result = "";
+    let position = 0;
+
+    while (position < str_len(s)) {
+        let remaining = str_substring(
+            s,
+            position,
+            str_len(s)
+        );
+
+        let index = str_index_of_str(remaining, old);
+
+        if (index < 0) {
+            result += remaining;
+            return result;
+        }
+
+        result += str_substring(remaining, 0, index);
+        result += replacement;
+
+        position += index + str_len(old);
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Split / Join
+# ------------------------------------------------------------
+
+fn str_split(str s, str sep): str[] {
+    let result: str[] = [];
+
+    if (str_len(sep) == 0) {
+        vector_push(&result, s);
+        return result;
+    }
+
+    let remaining = s;
+    let sep_len = str_len(sep);
+
+    while (true) {
+        let idx = str_index_of_str(remaining, sep);
+
+        if (idx < 0) {
+            vector_push(&result, remaining);
+            return result;
+        }
+
+        vector_push(
+            &result,
+            str_substring(remaining, 0, idx)
+        );
+
+        remaining = str_substring(
+            remaining,
+            idx + sep_len,
+            str_len(remaining)
+        );
+    }
+}
+
+fn str_join(str[] parts, str separator): str {
+    let result = "";
+
+    for (let i = 0; i < vector_size(&parts); i += 1) {
+        if (i != 0) {
+            result += separator;
+        }
+
+        result += parts[i];
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Reverse
+# ------------------------------------------------------------
+
+fn str_reverse(str s): str {
+    let result = "";
+
+    for (let i = str_len(s) - 1; i >= 0; i -= 1) {
+        result += s[i];
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Repeat / Padding
+# ------------------------------------------------------------
+
+fn str_repeat(str s, i64 count): str {
+    let result = "";
+
+    if (count <= 0) return result;
+
+    for (let i = 0; i < count; i += 1) {
+        result += s;
+    }
+
+    return result;
+}
+
+fn str_pad_left(str s, i64 length, char padding): str {
+    let result = s;
+
+    while (str_len(result) < length) {
+        result = padding + result;
+    }
+
+    return result;
+}
+
+fn str_pad_right(str s, i64 length, char padding): str {
+    let result = s;
+
+    while (str_len(result) < length) {
+        result += padding;
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Numeric parsing
+# ------------------------------------------------------------
+
+fn str_is_i64(str s): bool {
+    if (str_len(s) == 0) return false;
+
+    let start = 0;
+
+    if (s[0] == '-' || s[0] == '+') {
+        if (str_len(s) == 1) return false;
+        start = 1;
+    }
+
+    for (let i = start; i < str_len(s); i += 1) {
+        if (!char_is_digit(s[i])) return false;
+    }
+
+    return true;
+}
+
+fn str_to_i64(str s): i64 {
+    if (str_len(s) == 0) return 0;
+
+    let sign = 1;
+    let start = 0;
+
+    if (s[0] == '-') {
+        sign = -1;
+        start = 1;
+    }
+
+    if (s[0] == '+') {
+        start = 1;
+    }
+
+    let result = 0;
+
+    for (let i = start; i < str_len(s); i += 1) {
+        let digit = char_to_digit(s[i]);
+
+        if (digit < 0) return 0;
+
+        result = result * 10 + digit;
+    }
+
+    return result * sign;
+}
+
+fn i64_to_str(i64 value): str {
+    if (value == 0) return "0";
+
+    let negative = value < 0;
+
+    if (negative) {
+        value = -value;
+    }
+
+    let result = "";
+
+    while (value > 0) {
+        let digit = value % 10;
+        result = digit_to_char(digit) + result;
+        value = value / 10;
+    }
+
+    if (negative) {
+        result = "-" + result;
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Hexadecimal
+# ------------------------------------------------------------
+
+fn hex_digit_to_i64(char c): i64 {
+    if (c as u8 >= '0' as u8 && c as u8 <= '9' as u8) {
+        return (c as u8 - '0' as u8) as i64;
+    }
+
+    if (c as u8 >= 'a' as u8 && c as u8 <= 'f' as u8) {
+        return (c  as u8 - 'a'  as u8 + 10  as u8) as i64;
+    }
+
+    if (c as u8 >= 'A' as u8 && c as u8 <= 'F' as u8) {
+        return (c as u8 - 'A' as u8 + 10 as u8) as i64;
+    }
+
+    return -1;
+}
+
+fn str_is_hex(str s): bool {
+    if (str_len(s) == 0) return false;
+
+    let start = 0;
+
+    if (str_len(s) >= 2) {
+        if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+            start = 2;
+        }
+    }
+
+    if (start == str_len(s)) return false;
+
+    for (let i = start; i < str_len(s); i += 1) {
+        if (!char_is_hex_digit(s[i])) return false;
+    }
+
+    return true;
+}
+
+fn str_to_hex_i64(str s): i64 {
+    let start = 0;
+
+    if (str_len(s) >= 2) {
+        if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+            start = 2;
+        }
+    }
+
+    let result = 0;
+
+    for (let i = start; i < str_len(s); i += 1) {
+        let digit = hex_digit_to_i64(s[i]);
+
+        if (digit < 0) return 0;
+
+        result = result * 16 + digit;
+    }
+
+    return result;
+}
+
+# ------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------
+
+fn str_count_char(str s, char target): i64 {
+    let count = 0;
+
+    for (let i = 0; i < str_len(s); i += 1) {
+        if (s[i] == target) {
+            count += 1;
+        }
+    }
+
+    return count;
+}
+
+fn str_count_str(str s, str target): i64 {
+    if (str_len(target) == 0) return 0;
+
+    let count = 0;
+    let position = 0;
+
+    while (position < str_len(s)) {
+        let remaining = str_substring(
+            s,
+            position,
+            str_len(s)
+        );
+
+        let index = str_index_of_str(remaining, target);
+
+        if (index < 0) {
+            break;
+        }
+
+        count += 1;
+        position += index + str_len(target);
+    }
+
+    return count;
+}
+
+fn str_is_blank(str s): bool {
+    if (str_len(s) == 0) return true;
+
+    for (let i = 0; i < str_len(s); i += 1) {
+        if (!char_is_whitespace(s[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+fn str_remove_whitespace(str s): str {
+    let result = "";
+
+    for (let i = 0; i < str_len(s); i += 1) {
+        if (!char_is_whitespace(s[i])) {
+            result += s[i];
+        }
+    }
+
+    return result;
+}
+
+fn str_remove_prefix(str s, str prefix): str {
+    if (str_starts_with(s, prefix)) {
+        return str_substring(
+            s,
+            str_len(prefix),
+            str_len(s)
+        );
+    }
+
+    return s;
+}
+
+fn str_remove_suffix(str s, str suffix): str {
+    if (str_ends_with(s, suffix)) {
+        return str_substring(
+            s,
+            0,
+            str_len(s) - str_len(suffix)
+        );
+    }
+
+    return s;
+}

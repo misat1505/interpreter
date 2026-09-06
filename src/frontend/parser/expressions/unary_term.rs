@@ -36,7 +36,7 @@ impl<L: ILexer> Parser<L> {
     fn parse_unary_term_factor(&mut self) -> Result<Node<Expression>, Box<dyn IError>> {
         match self.parse_factor()? {
             Some(t) => Ok(t),
-            None => return Err(self.create_parser_error(String::from("Couldn't create factor while parsing unary term."))),
+            None => Err(self.create_parser_error(String::from("Couldn't create factor while parsing unary term."))),
         }
     }
 }

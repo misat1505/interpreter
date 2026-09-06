@@ -22,7 +22,7 @@ pub fn append_file() -> StdFunction {
         let fn_name = "append_file";
         let expected_types = vec![Type::Str, Type::Str];
         let mut actual_types: Vec<Type> = vec![];
-        if let Some(filepath) = params.get(0) {
+        if let Some(filepath) = params.first() {
             actual_types.push(filepath.borrow().to_type());
             if let Some(content) = params.get(1) {
                 actual_types.push(content.borrow().to_type());

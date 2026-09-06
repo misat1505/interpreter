@@ -35,7 +35,7 @@ impl<'a> SemanticChecker<'a> {
                                     let error = SemanticCheckerError::type_mismatch(
                                         ErrorSeverity::HIGH,
                                         format!(
-                                            "Cannot assign a value of type `{:?}` to variable `{}` of type `{:?}`.",
+                                            "Cannot assign a value of type `{}` to variable `{}` of type `{}`.",
                                             actual_type, identifier.value, declared_type
                                         ),
                                         &declared_type,
@@ -58,7 +58,7 @@ impl<'a> SemanticChecker<'a> {
                     }
                 }
                 self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{:?} {}\n```", resolved_type.unwrap_or(Type::Void), identifier.value),
+                    contents: format!("```raptor\n{} {}\n```", resolved_type.unwrap_or(Type::Void), identifier.value),
                     span: identifier.span,
                 });
             }
@@ -83,7 +83,7 @@ impl<'a> SemanticChecker<'a> {
                                 let error = SemanticCheckerError::type_mismatch(
                                     ErrorSeverity::HIGH,
                                     format!(
-                                        "Cannot assign a value of type `{:?}` to variable `{}` of type `{:?}`.",
+                                        "Cannot assign a value of type `{}` to variable `{}` of type `{}`.",
                                         resolved_type, identifier.value, declared_type
                                     ),
                                     &declared_type,
@@ -111,7 +111,7 @@ impl<'a> SemanticChecker<'a> {
                                 let error = SemanticCheckerError::at(
                                     ErrorSeverity::HIGH,
                                     format!(
-                                        "Cannot infer the type of an empty vector. Add a type annotation, e.g. `let {}: {:?} = [];`.",
+                                        "Cannot infer the type of an empty vector. Add a type annotation, e.g. `let {}: {} = [];`.",
                                         identifier.value,
                                         Type::Vector(Box::new(Type::I64))
                                     ),
@@ -121,7 +121,7 @@ impl<'a> SemanticChecker<'a> {
                             } else if resolved_type == Type::Void {
                                 let error = SemanticCheckerError::at(
                                     ErrorSeverity::HIGH,
-                                    format!("Cannot assign a value of type `{:?}` to variable `{}`.", resolved_type, identifier.value),
+                                    format!("Cannot assign a value of type `{}` to variable `{}`.", resolved_type, identifier.value),
                                     statement.span,
                                 );
                                 self.errors.push(Box::new(error));
@@ -138,7 +138,7 @@ impl<'a> SemanticChecker<'a> {
                     },
                 };
                 self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{:?} {}\n```", final_type, identifier.value),
+                    contents: format!("```raptor\n{} {}\n```", final_type, identifier.value),
                     span: identifier.span,
                 });
             }
@@ -171,7 +171,7 @@ impl<'a> SemanticChecker<'a> {
                     .push(Box::new(SemanticCheckerError::at(ErrorSeverity::HIGH, err.message(), statement.span)));
             }
             self.hovers.push(HoverInfo {
-                contents: format!("```raptor\n{:?} {}\n```", value, identifier.value),
+                contents: format!("```raptor\n{} {}\n```", value, identifier.value),
                 span: identifier.span,
             });
         } else {
@@ -310,11 +310,7 @@ impl<'a> SemanticChecker<'a> {
             if expected == Type::Void && value.is_some() {
                 self.errors.push(Box::new(SemanticCheckerError::at(
                     ErrorSeverity::HIGH,
-                    format!(
-                        "Function `{}` returns `{:?}` and must use `return;` without a value.",
-                        fn_name,
-                        Type::Void
-                    ),
+                    format!("Function `{}` returns `{}` and must use `return;` without a value.", fn_name, Type::Void),
                     statement.span,
                 )));
             }
@@ -385,21 +381,18 @@ impl<'a> SemanticChecker<'a> {
     ) -> Result<(), Box<dyn IError>> {
         let expression = &switch_expression.value.expression;
         let _ = self.visit_expression(expression);
-        match self.read_last_result(expression.span) {
-            Ok(resolved_type) => match &switch_expression.value.alias {
-                None => {}
-                Some(id) => {
-                    if let Err(err) = self.stack.declare_variable(id.value.as_str(), resolved_type, id.span) {
-                        self.errors.push(Box::new(SemanticCheckerError::at(
-                            ErrorSeverity::HIGH,
-                            err.message(),
-                            switch_expression.span,
-                        )));
-                    }
+        if let Ok(resolved_type) = self.read_last_result(expression.span) { match &switch_expression.value.alias {
+            None => {}
+            Some(id) => {
+                if let Err(err) = self.stack.declare_variable(id.value.as_str(), resolved_type, id.span) {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        err.message(),
+                        switch_expression.span,
+                    )));
                 }
-            },
-            Err(_) => {}
-        }
+            }
+        } }
         Ok(())
     }
 }
