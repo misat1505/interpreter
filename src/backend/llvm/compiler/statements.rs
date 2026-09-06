@@ -155,21 +155,22 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         self.visit_expression(value)?;
 
                         let init_value = self.read_last_value()?;
-                        let resolved_type = init_value.to_type();
+                        let resolved_type = self.resolve_type(&init_value.to_type());
 
                         let final_type = match var_type {
                             Some(var_type) => {
-                                if !var_type.value.is_compatible(&resolved_type) {
+                                let resolved_var_type = self.resolve_type(&var_type.value);
+                                if !resolved_var_type.is_compatible(&resolved_type) {
                                     return Err(Box::new(CompilerError::expected_found(
                                         ErrorSeverity::HIGH,
                                         format!("Cannot assign value to variable '{}'.", identifier.value),
-                                        format!("{}", var_type.value),
+                                        format!("{}", resolved_var_type),
                                         format!("{}", resolved_type),
                                         span,
                                     )));
                                 }
 
-                                var_type.value.clone()
+                                resolved_var_type.clone()
                             }
 
                             None => {
