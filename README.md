@@ -2,29 +2,38 @@
 
 Raptor is a custom interpreted and compiled programming language written in Rust.
 
-It is a strongly and statically typed language with mutable variables, scoped execution,
-functions, references, multidimensional vectors, type conversions, and structured control flow.
+It is a strongly and statically typed language with mutable variables, scoped execution, functions, references, structs, multidimensional vectors, type conversions, and structured control flow.
 
 The project provides **two executables**:
 
 * `raptor` — the Raptor compiler and interpreter
 * `lsp` — the Language Server Protocol (LSP) server for editor integration
 
+## Table of contents
+
+* [Language pipeline](#language-pipeline)
+* [Executables](#executables)
+* [Documentation](#documentation)
+* [Quick start](#quick-start)
+* [CLI options](#cli-options)
+* [Example program](#example-program)
+* [Language overview](#language-overview)
+* [Errors and diagnostics](#errors-and-diagnostics)
+* [Testing](#testing)
+* [LLVM](#llvm)
+* [Cargo targets](#cargo-targets)
+
 ## Language pipeline
 
 ![](./docs/diagram/compiler_pipeline.png)
 
-The semantic checker performs **type checking** and other static validation before the
-program is interpreted or compiled, unless `--unsafe` is explicitly used.
+The semantic checker performs **type checking** and other static validation before the program is interpreted or compiled, unless `--unsafe` is explicitly used.
 
 ## Executables
 
 ### `raptor`
 
-The `raptor` executable is the main Raptor command-line tool. It provides both the
-interpreter and compiler.
-
-It can:
+The main Raptor command-line tool. It provides both the interpreter and the compiler, and can:
 
 * interpret Raptor source files;
 * compile Raptor programs to native executables;
@@ -34,174 +43,95 @@ It can:
 
 ### `lsp`
 
-The `lsp` executable is the Raptor Language Server Protocol implementation.
-
-It provides language-server functionality for editors and IDEs that support LSP,
-allowing Raptor source files to be integrated with development environments.
+The Raptor Language Server Protocol implementation. It provides language-server functionality for editors and IDEs that support LSP, allowing Raptor source files to be integrated with development environments.
 
 The LSP server is a separate executable from the `raptor` compiler/interpreter.
 
 ## Documentation
 
-| Component        | Documentation                                        |
-| ---------------- | ---------------------------------------------------- |
-| Grammar          | [docs/grammar.md](docs/grammar.md)                   |
-| Lexer            | [docs/lexer.md](docs/lexer.md)                       |
-| Parser           | [docs/parser.md](docs/parser.md)                     |
-| Semantic Checker | [docs/semantic-checker.md](docs/semantic-checker.md) |
-| Interpreter      | [docs/interpreter.md](docs/interpreter.md)           |
-| Compiler         | [docs/compiler.md](docs/compiler.md)                 |
+| Component          | Documentation                                           |
+| ------------------ | -------------------------------------------------------- |
+| Grammar             | [docs/grammar.md](docs/grammar.md)                       |
+| Lexer               | [docs/lexer.md](docs/lexer.md)                           |
+| Parser              | [docs/parser.md](docs/parser.md)                         |
+| Semantic Checker    | [docs/semantic-checker.md](docs/semantic-checker.md)     |
+| Interpreter         | [docs/interpreter.md](docs/interpreter.md)               |
+| Compiler            | [docs/compiler.md](docs/compiler.md)                     |
+| Memory Management   | [docs/memory-management.md](docs/memory-management.md)   |
 
 ## Quick start
 
-### Build the project
+### Build
 
-The project contains two executable targets: `raptor` and `lsp`.
-
-Build both in release mode:
+The project defines two executable targets, `raptor` and `lsp`, plus the shared `raptor_lib` library crate they're both built on.
 
 ```bash
+# Build everything
 cargo build --release
-```
 
-The resulting executables will be available at:
-
-```text
-target/release/raptor
-target/release/lsp
-```
-
-### Build only `raptor`
-
-```bash
+# Build only the compiler/interpreter
 cargo build --release --bin raptor
-```
 
-The executable will be available at:
-
-```text
-target/release/raptor
-```
-
-### Build only `lsp`
-
-```bash
+# Build only the LSP server
 cargo build --release --bin lsp
 ```
 
-The executable will be available at:
+The resulting executables are written to `target/release/raptor` and `target/release/lsp`.
 
-```text
-target/release/lsp
-```
-
-## Running Raptor programs
-
-### Run a program with the interpreter
-
-The default behavior of `raptor` is to interpret a Raptor source file:
+### Run a Raptor program
 
 ```bash
+# Interpret (default behavior)
 ./target/release/raptor examples/basic.rp
-```
 
-### Compile a program
-
-Use `--compile` to compile a Raptor source file to a native executable:
-
-```bash
+# Compile to a native executable (written to build/)
 ./target/release/raptor --compile examples/basic.rp
-```
 
-Generated compilation artifacts are written to `build/`.
-
-### Compile and run a program
-
-Use `--run` to compile the program and immediately execute the resulting native
-executable:
-
-```bash
+# Compile and immediately run the result
 ./target/release/raptor --run examples/basic.rp
-```
-
-`--run` implies `--compile`.
-
-The same operation can also be written explicitly as:
-
-```bash
+# equivalent to:
 ./target/release/raptor --compile --run examples/basic.rp
 ```
 
-## Development
+### Development
 
-During development, `cargo run` can be used to run either executable directly.
-
-### Run the interpreter
+During development, `cargo run` builds and runs directly from source, without a separate release build:
 
 ```bash
-cargo run --bin raptor -- examples/basic.rp
+cargo run --bin raptor -- examples/basic.rp             # interpret
+cargo run --bin raptor -- --compile examples/basic.rp    # compile
+cargo run --bin raptor -- --run examples/basic.rp         # compile and run
+cargo run --bin lsp                                        # LSP server
 ```
 
-### Compile a program
-
-```bash
-cargo run --bin raptor -- --compile examples/basic.rp
-```
-
-### Compile and run a program
-
-```bash
-cargo run --bin raptor -- --run examples/basic.rp
-```
-
-### Run the LSP server
-
-```bash
-cargo run --bin lsp
-```
-
-For normal local usage, it is recommended to build the project once in release mode:
-
-```bash
-cargo build --release
-```
-
-Then use the generated executables directly:
-
-```bash
-./target/release/raptor --run examples/basic.rp
-```
-
-or:
-
-```bash
-./target/release/lsp
-```
+For everyday local use, prefer building once in release mode and invoking the resulting binaries directly, as shown above — debug builds of the compiler are noticeably slower.
 
 ## CLI options
 
 The `raptor` executable supports the following options:
 
 ```text
--h, --help      Show help
---unsafe        Skip semantic checking
---compile       Compile instead of interpreting
---run           Compile and then run
--O0             No optimization
--O1             Basic optimization
--O2             Default optimization
--O3             Aggressive optimization
+-h, --help          Show this help message
+-v, --verbose       Show execution time of each phase
+--unsafe            Skip semantic checking
+--compile           Compile the source file instead of interpreting it
+--run               After compiling, build and run the resulting executable (implies --compile)
+-o <FILE>           Set output executable path
+--link <FILE>       Link an additional object file (compilation mode only)
+-O0                 No optimization (default)
+-O1                 Basic optimization
+-O2                 Default optimization
+-O3                 Aggressive optimization
+--overflow <POLICY> Integer overflow policy: ignore, warn, error
 ```
 
 The compiler writes generated artifacts to `build/`.
 
-The `lsp` executable is a separate LSP server and does not use the `raptor` command-line
-interface described above.
+The `lsp` executable is a separate LSP server and does not use the `raptor` command-line interface described above.
 
 ## Example program
 
-The following program demonstrates several core Raptor features: variables, functions,
-references, loops, conditionals, vectors, and static typing.
+The following program demonstrates several core Raptor features: variables, functions, references, loops, conditionals, vectors, and static typing.
 
 ```text
 fn sum(i64[] values): i64 {
@@ -271,24 +201,12 @@ fn main(): void {
 main();
 ```
 
-Save the program as `examples/demo.rp`.
-
-Run it using the interpreter:
+Save the program as `examples/demo.rp`, then run it with any of:
 
 ```bash
-./target/release/raptor examples/demo.rp
-```
-
-Or compile it to a native executable:
-
-```bash
-./target/release/raptor --compile examples/demo.rp
-```
-
-To compile and immediately execute it:
-
-```bash
-./target/release/raptor --run examples/demo.rp
+./target/release/raptor examples/demo.rp             # interpret
+./target/release/raptor --compile examples/demo.rp    # compile
+./target/release/raptor --run examples/demo.rp         # compile and run
 ```
 
 ## Language overview
@@ -299,6 +217,7 @@ Raptor currently supports:
 * mutable variables with block-based scoping;
 * functions and recursion;
 * parameters passed by value or by reference;
+* structs, including fields of composite (`str`, vector, struct) type;
 * `if`, `for`, `while`, and `switch`;
 * `break`, `continue`, and `return`;
 * arithmetic, comparison, and logical operators;
@@ -316,8 +235,11 @@ i64[][]     # two-dimensional vector
 i64[][][]   # three-dimensional vector
 ```
 
-When a vector is passed **by value**, the language uses a **shallow copy**. The vector
-structure is copied, while nested vector data is not recursively deep-copied.
+When a vector is passed **by value**, the language uses a **shallow copy**: the vector's own structure is copied, while any composite elements it contains are shared, not recursively deep-copied.
+
+### Memory management
+
+`str`, vectors, and structs are heap-allocated and managed automatically through reference counting — there is no manual `free`/`delete` and no garbage collector pause. Assigning or passing these types follows consistent value/reference rules (e.g. strings are always deep-copied, vectors and structs are shared or shallow-copied depending on context). See [docs/memory-management.md](docs/memory-management.md) for the full model, including its current known limitations (reference cycles are not collected).
 
 ## Errors and diagnostics
 
@@ -328,13 +250,13 @@ error: <message>
   --> <file>:<line>:<column>
 ```
 
-Different pipeline stages report different classes of errors.
+Different pipeline stages report different classes of errors:
 
-* The lexer reports malformed lexical input.
-* The parser reports syntax errors.
-* The semantic checker performs static type checking and related validation.
-* The interpreter reports runtime errors.
-* The compiler reports code-generation and compilation errors.
+* the lexer reports malformed lexical input;
+* the parser reports syntax errors;
+* the semantic checker performs static type checking and related validation;
+* the interpreter reports runtime errors;
+* the compiler reports code-generation and compilation errors.
 
 See the individual component documentation for examples and details.
 
@@ -346,26 +268,15 @@ Run the complete test suite with:
 cargo test
 ```
 
-The project includes unit tests for core components and integration tests for the
-language pipeline.
+The project includes unit tests for core components and integration tests for the language pipeline.
 
 ## LLVM
 
-The native compilation pipeline currently targets **LLVM 18** and invokes:
+The native compilation pipeline currently targets **LLVM 18** and invokes `llc-18` and `clang-18`. These tools must be available on `PATH` when using `--compile` or `--run`.
 
-```text
-llc-18
-clang-18
-```
-
-These tools must be available on `PATH` when using `--compile` or `--run`.
-
-The LLVM toolchain is only required for native compilation. Running a program through
-the interpreter does not require the native compilation step.
+The LLVM toolchain is only required for native compilation — running a program through the interpreter does not require it.
 
 ## Cargo targets
-
-The project defines the following Cargo targets:
 
 ```toml
 [lib]
@@ -381,83 +292,12 @@ name = "lsp"
 path = "src/bin/lsp.rs"
 ```
 
-This means the project builds:
-
-* `raptor` — compiler/interpreter CLI;
-* `lsp` — Language Server Protocol server;
-* `raptor_lib` — shared library crate.
-
-Build both executables with:
-
-```bash
-cargo build --release
-```
-
-Build only the compiler/interpreter:
-
-```bash
-cargo build --release --bin raptor
-```
-
-Build only the LSP server:
-
-```bash
-cargo build --release --bin lsp
-```
-
-## Summary
-
-Raptor consists of a library and two executable targets:
-
 ```text
-┌─────────────────────┐
-│       raptor        │
-│                     │
-│  Interpreter        │
-│  Compiler           │
-│  CLI                │
-└─────────────────────┘
-
-┌─────────────────────┐
-│         lsp         │
-│                     │
-│  Language Server    │
-│  Protocol (LSP)     │
-└─────────────────────┘
-
-┌─────────────────────┐
-│     raptor_lib      │
-│                     │
-│   Raptor library    │
-└─────────────────────┘
-```
-
-Build the complete project:
-
-```bash
-cargo build --release
-```
-
-Run a Raptor program:
-
-```bash
-./target/release/raptor program.rp
-```
-
-Compile a Raptor program:
-
-```bash
-./target/release/raptor --compile program.rp
-```
-
-Compile and run a Raptor program:
-
-```bash
-./target/release/raptor --run program.rp
-```
-
-Start the LSP server:
-
-```bash
-./target/release/lsp
+┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+│        raptor       │   │          lsp        │   │      raptor_lib     │
+│                     │   │                     │   │                     │
+│  Interpreter        │   │  Language Server    │   │  Shared library     │
+│  Compiler           │   │  Protocol (LSP)     │   │  used by both       │
+│  CLI                │   │                     │   │  executables        │
+└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
 ```
