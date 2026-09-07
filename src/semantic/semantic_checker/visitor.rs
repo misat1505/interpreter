@@ -53,8 +53,8 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             self.stack.pop_stack_frame();
         }
 
-        for (_, type_declaration) in &self.program.declared_types {
-            self.scan_type_declaration(&*type_declaration)?;
+        for type_declaration in self.program.declared_types.values() {
+            self.scan_type_declaration(type_declaration)?;
         }
 
         Ok(())
