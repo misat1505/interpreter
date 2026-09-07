@@ -5,7 +5,7 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Accessor, Expression, Node},
+    frontend::ast::{Accessor, DeclaredType, Expression, Node},
     semantic::{
         semantic_checker::{
             checker::{DefinitionInfo, HoverInfo},
@@ -32,27 +32,29 @@ impl<'a> SemanticChecker<'a> {
                 return;
             }
         };
+
         self.hovers.push(HoverInfo {
             contents: format!("```raptor\n{} {}\n```", current_type, identifier.value),
             span: identifier.span,
         });
 
-        let def_span = self
-            .stack
-            .get_variable_declaration_span(identifier.value.as_str(), identifier.span)
-            .unwrap();
-        self.definitions.push(DefinitionInfo {
-            use_span: identifier.span,
-            def_span: *def_span,
-        });
+        if let Ok(def_span) = self.stack.get_variable_declaration_span(identifier.value.as_str(), identifier.span) {
+            self.definitions.push(DefinitionInfo {
+                use_span: identifier.span,
+                def_span: *def_span,
+            });
+        }
+
         for accessor in accessors {
             match &accessor.value {
                 Accessor::Index(index_expr) => {
                     let _ = self.visit_expression(index_expr);
+
                     let idx_type = match self.read_last_result(index_expr.span) {
                         Ok(t) => t,
                         Err(_) => return,
                     };
+
                     if idx_type != Type::I64 {
                         self.errors.push(Box::new(SemanticCheckerError::type_mismatch(
                             ErrorSeverity::HIGH,
@@ -63,6 +65,7 @@ impl<'a> SemanticChecker<'a> {
                         )));
                         return;
                     }
+
                     current_type = match current_type {
                         Type::Vector(inner) => *inner,
                         Type::Str => Type::Char,
@@ -76,47 +79,86 @@ impl<'a> SemanticChecker<'a> {
                         }
                     };
                 }
+
                 Accessor::Field(field) => {
-                    let Type::Struct {
-                        identifier: struct_name,
-                        fields,
-                    } = &current_type
-                    else {
-                        self.errors.push(Box::new(SemanticCheckerError::at(
-                            ErrorSeverity::HIGH,
-                            format!("Cannot access field `{}` on a value of type `{}`.", field.value, current_type),
-                            field.span,
-                        )));
-                        return;
+                    let (struct_name, field_type) = match &current_type {
+                        Type::Struct { identifier, fields } => {
+                            let Some(field_type) = fields.get(&field.value).cloned() else {
+                                self.errors.push(Box::new(SemanticCheckerError::at(
+                                    ErrorSeverity::HIGH,
+                                    format!("Struct `{}` has no field named `{}`.", identifier, field.value),
+                                    field.span,
+                                )));
+                                return;
+                            };
+
+                            (identifier.clone(), field_type)
+                        }
+
+                        other => {
+                            self.errors.push(Box::new(SemanticCheckerError::at(
+                                ErrorSeverity::HIGH,
+                                format!("Cannot access field `{}` on a value of type `{}`.", field.value, other),
+                                field.span,
+                            )));
+                            return;
+                        }
                     };
-                    let Some(field_type) = fields.get(&field.value).cloned() else {
-                        self.errors.push(Box::new(SemanticCheckerError::at(
-                            ErrorSeverity::HIGH,
-                            format!("Struct `{}` has no field named `{}`.", struct_name, field.value),
-                            field.span,
-                        )));
-                        return;
-                    };
+
                     current_type = match self.resolve_type_fully_checked(&field_type, field.span) {
                         Ok(t) => t,
                         Err(_) => return,
                     };
+
                     self.hovers.push(HoverInfo {
                         contents: format!("```raptor\n{} {}\n```", current_type, field.value),
                         span: field.span,
                     });
+
+                    let Some(type_declaration) = self.program.declared_types.get(&struct_name) else {
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            format!("Cannot find declaration of struct `{}`.", struct_name),
+                            field.span,
+                        )));
+                        return;
+                    };
+
+                    let DeclaredType::Struct(struct_declaration) = &type_declaration.value;
+
+                    let Some(member_declaration) = struct_declaration
+                        .members
+                        .iter()
+                        .find(|member| member.value.identifier.value == field.value)
+                    else {
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            format!("Cannot find declaration of field `{}` in struct `{}`.", field.value, struct_name),
+                            field.span,
+                        )));
+                        return;
+                    };
+
+                    self.definitions.push(DefinitionInfo {
+                        use_span: field.span,
+                        def_span: member_declaration.value.identifier.span,
+                    });
                 }
             }
         }
+
         let _ = self.visit_expression(value);
+
         let actual_type = match self.read_last_result(value.span) {
             Ok(t) => t,
             Err(_) => return,
         };
+
         let compatible = match (&current_type, &actual_type) {
             (Type::Vector(_), Type::Vector(inner)) if **inner == Type::Void => true,
             _ => actual_type == current_type,
         };
+
         if !compatible {
             self.errors.push(Box::new(SemanticCheckerError::type_mismatch(
                 ErrorSeverity::HIGH,
@@ -243,6 +285,32 @@ impl<'a> SemanticChecker<'a> {
                     span: field.span,
                 });
                 self.last_result = Some(field_type);
+
+                let Some(type_declaration) = self.program.declared_types.get(identifier) else {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Cannot find declaration of struct `{}`.", identifier),
+                        field.span,
+                    )));
+                    return Ok(());
+                };
+                let DeclaredType::Struct(struct_declaration) = &type_declaration.value;
+                let Some(member_declaration) = struct_declaration
+                    .members
+                    .iter()
+                    .find(|member| member.value.identifier.value == field.value)
+                else {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Cannot find declaration of field `{}` in struct `{}`.", field.value, identifier),
+                        field.span,
+                    )));
+                    return Ok(());
+                };
+                self.definitions.push(DefinitionInfo {
+                    use_span: field.span,
+                    def_span: member_declaration.value.identifier.span,
+                });
             }
         }
         Ok(())

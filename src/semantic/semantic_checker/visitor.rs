@@ -5,7 +5,9 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Argument, Block, Expression, Literal, Node, Parameter, Program, Statement, StructLiteral, SwitchCase, SwitchExpression},
+    frontend::ast::{
+        Argument, Block, DeclaredType, Expression, Literal, Node, Parameter, Program, Statement, StructLiteral, SwitchCase, SwitchExpression,
+    },
     semantic::semantic_checker::{
         checker::{DefinitionInfo, HoverInfo},
         functions::FunctionCallType,
@@ -228,14 +230,18 @@ impl<'a> SemanticChecker<'a> {
     pub(in crate::semantic::semantic_checker) fn visit_struct_literal(&mut self, node: &'a Node<StructLiteral>) -> Result<(), Box<dyn IError>> {
         let identifier = &node.value.identifier;
         let fields = &node.value.fields;
+
         let type_node: &'a Node<Type> = Box::leak(Box::new(Node {
             value: Type::Unresolved(identifier.value.clone()),
             span: identifier.span,
         }));
+
         let _ = self.visit_type(type_node);
+
         let Ok(declared_type) = self.read_last_result(identifier.span) else {
             return Ok(());
         };
+
         let Type::Struct {
             identifier: struct_name,
             fields: expected_fields,
@@ -249,13 +255,18 @@ impl<'a> SemanticChecker<'a> {
             self.errors.push(Box::new(error));
             return Ok(());
         };
+
         let mut seen_fields = HashSet::new();
+
         for field in fields {
             let field_name = &field.value.identifier.value;
+
             self.visit_expression(&field.value.value)?;
+
             let Ok(actual_type) = self.read_last_result(field.value.value.span) else {
                 continue;
             };
+
             let Some(expected_type) = expected_fields.get(field_name) else {
                 let error = SemanticCheckerError::at(
                     ErrorSeverity::HIGH,
@@ -265,18 +276,53 @@ impl<'a> SemanticChecker<'a> {
                 self.errors.push(Box::new(error));
                 continue;
             };
+
+            let Some(type_declaration) = self.program.declared_types.get(struct_name) else {
+                let error = SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("Cannot find declaration of struct `{}`.", struct_name),
+                    field.value.identifier.span,
+                );
+                self.errors.push(Box::new(error));
+                continue;
+            };
+
+            let DeclaredType::Struct(struct_declaration) = &type_declaration.value;
+
+            let Some(member_declaration) = struct_declaration
+                .members
+                .iter()
+                .find(|member| member.value.identifier.value == *field_name)
+            else {
+                let error = SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("Cannot find declaration of field `{}` in struct `{}`.", field_name, struct_name),
+                    field.value.identifier.span,
+                );
+                self.errors.push(Box::new(error));
+                continue;
+            };
+
+            self.definitions.push(DefinitionInfo {
+                use_span: field.value.identifier.span,
+                def_span: member_declaration.value.identifier.span,
+            });
+
             let expected_type = match self.resolve_type_fully_checked(expected_type, field.span) {
                 Ok(t) => t,
                 Err(_) => continue,
             };
+
             let actual_type = match self.resolve_type_fully_checked(&actual_type, field.value.value.span) {
                 Ok(t) => t,
                 Err(_) => continue,
             };
+
             let compatible = match (&expected_type, &actual_type) {
                 (Type::Vector(expected_inner), Type::Vector(actual_inner)) if **actual_inner == Type::Void => true,
                 _ => expected_type.is_compatible(&actual_type),
             };
+
             if !compatible {
                 let error = SemanticCheckerError::type_mismatch(
                     ErrorSeverity::HIGH,
@@ -290,6 +336,7 @@ impl<'a> SemanticChecker<'a> {
                 );
                 self.errors.push(Box::new(error));
             }
+
             if !seen_fields.insert(field_name.clone()) {
                 let error = SemanticCheckerError::at(
                     ErrorSeverity::HIGH,
@@ -299,6 +346,7 @@ impl<'a> SemanticChecker<'a> {
                 self.errors.push(Box::new(error));
             }
         }
+
         for expected_name in expected_fields.keys() {
             if !seen_fields.contains(expected_name) {
                 let error = SemanticCheckerError::at(
@@ -309,11 +357,14 @@ impl<'a> SemanticChecker<'a> {
                 self.errors.push(Box::new(error));
             }
         }
+
         self.hovers.push(HoverInfo {
             contents: format!("```raptor\n{}\n```", declared_type),
             span: identifier.span,
         });
+
         self.last_result = Some(declared_type);
+
         Ok(())
     }
 
