@@ -10,7 +10,7 @@ use raptor_lib::frontend::lexer::lexer::{Lexer, LexerOptions};
 use raptor_lib::frontend::parser::{IParser, Parser};
 use raptor_lib::frontend::tokens::{TokenCategory, TokenValue};
 use raptor_lib::import_resolver::ImportResolver;
-use raptor_lib::semantic::semantic_checker::checker::{HoverInfo, SemanticChecker};
+use raptor_lib::semantic::semantic_checker::checker::{DefinitionInfo, HoverInfo, SemanticChecker};
 
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result as LspResult;
@@ -84,6 +84,7 @@ fn fix_wsl_drive_prefix(path: String) -> String {
 struct DocumentState {
     text: String,
     hovers: Vec<HoverInfo>,
+    definitions: Vec<DefinitionInfo>,
 }
 
 struct Backend {
@@ -135,6 +136,7 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions::default()),
+                definition_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -201,14 +203,45 @@ impl LanguageServer for Backend {
             range: Some(span_to_range(&h.span)),
         }))
     }
+
+    async fn goto_definition(&self, params: GotoDefinitionParams) -> LspResult<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let documents = self.documents.lock().await;
+        let Some(doc) = documents.get(&uri) else {
+            return Ok(None);
+        };
+
+        let best = doc
+            .definitions
+            .iter()
+            .filter(|d| span_contains_position(&d.use_span, position))
+            .min_by_key(|d| span_len(&d.use_span));
+
+        let Some(def) = best else {
+            return Ok(None);
+        };
+
+        let def_filename = def.def_span.start().filename.unwrap_or_else(|| filename_for_uri(&uri));
+        let target_uri = uri_for_filename(def_filename).unwrap_or_else(|| uri.clone());
+
+        Ok(Some(GotoDefinitionResponse::Scalar(Location {
+            uri: target_uri,
+            range: span_to_range(&def.def_span),
+        })))
+    }
 }
 
 impl Backend {
     async fn validate(&self, uri: Url, text: String) {
         let filename = filename_for_uri(&uri);
-        let (diagnostics_by_file, hovers) = analyze(&text, filename);
+        let (diagnostics_by_file, hovers, definitions) = analyze(&text, filename);
 
-        self.documents.lock().await.insert(uri.clone(), DocumentState { text, hovers });
+        self.documents
+            .lock()
+            .await
+            .insert(uri.clone(), DocumentState { text, hovers, definitions });
 
         let mut current_files: HashSet<&'static str> = HashSet::new();
 
@@ -245,7 +278,7 @@ impl Backend {
     }
 }
 
-fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<Diagnostic>>, Vec<HoverInfo>) {
+fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<Diagnostic>>, Vec<HoverInfo>, Vec<DefinitionInfo>) {
     let mut diagnostics: HashMap<&'static str, Vec<Diagnostic>> = HashMap::new();
 
     LEXER_WARNINGS.with(|w| w.borrow_mut().clear());
@@ -262,7 +295,7 @@ fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<D
         Ok(lexer) => lexer,
         Err(err) => {
             push_error(&mut diagnostics, err.as_ref(), DiagnosticSeverity::ERROR, filename);
-            return (diagnostics, vec![]);
+            return (diagnostics, vec![], vec![]);
         }
     };
 
@@ -278,7 +311,7 @@ fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<D
         Ok(program) => program,
         Err(err) => {
             push_error(&mut diagnostics, err.as_ref(), DiagnosticSeverity::ERROR, filename);
-            return (diagnostics, vec![]);
+            return (diagnostics, vec![], vec![]);
         }
     };
 
@@ -287,7 +320,7 @@ fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<D
         Ok(program) => program,
         Err(err) => {
             push_error(&mut diagnostics, err.as_ref(), DiagnosticSeverity::ERROR, filename);
-            return (diagnostics, vec![]);
+            return (diagnostics, vec![], vec![]);
         }
     };
 
@@ -295,7 +328,7 @@ fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<D
         Ok(checker) => checker,
         Err(err) => {
             push_error(&mut diagnostics, err.as_ref(), DiagnosticSeverity::ERROR, filename);
-            return (diagnostics, vec![]);
+            return (diagnostics, vec![], vec![]);
         }
     };
 
@@ -309,7 +342,7 @@ fn analyze(source: &str, filename: &'static str) -> (HashMap<&'static str, Vec<D
         push_error(&mut diagnostics, error.as_ref(), severity, filename);
     }
 
-    (diagnostics, semantic_checker.hovers)
+    (diagnostics, semantic_checker.hovers, semantic_checker.definitions)
 }
 
 /// Adds a diagnostic to the bucket matching the file its span actually points to,

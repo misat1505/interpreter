@@ -49,6 +49,19 @@ impl<'a> StaticCheckerScopeManager<'a> {
         ))
     }
 
+    pub(in crate::semantic::stack) fn get_variable_declaration_span(&mut self, searched: &'a str, span: Span) -> Result<&Span, ScopeManagerError> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(var) = scope.get_variable_mut(searched) {
+                return Ok(&var.span);
+            }
+        }
+        Err(ScopeManagerError::new(
+            ErrorSeverity::HIGH,
+            format!("Variable '{}' not declared in this scope.", searched),
+            span,
+        ))
+    }
+
     pub(in crate::semantic::stack) fn assign_variable(&mut self, name: &'a str, value: Type, span: Span) -> Result<(), ScopeManagerError> {
         for scope in self.scopes.iter_mut().rev() {
             if scope.get_variable(name).is_some() {

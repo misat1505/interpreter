@@ -5,7 +5,10 @@ use crate::{
         visitor::Visitor,
     },
     frontend::ast::{Node, Statement, SwitchCase, SwitchExpression, VariableDeclarationKind},
-    semantic::semantic_checker::{checker::HoverInfo, SemanticChecker},
+    semantic::semantic_checker::{
+        checker::{DefinitionInfo, HoverInfo},
+        SemanticChecker,
+    },
 };
 
 impl<'a> SemanticChecker<'a> {
@@ -174,6 +177,13 @@ impl<'a> SemanticChecker<'a> {
                 contents: format!("```raptor\n{} {}\n```", value, identifier.value),
                 span: identifier.span,
             });
+
+            if let Ok(def_span) = self.stack.get_variable_declaration_span(identifier.value.as_str(), statement.span) {
+                self.definitions.push(DefinitionInfo {
+                    def_span: *def_span,
+                    use_span: identifier.span,
+                });
+            }
         } else {
             self.check_index_assignment(identifier, accessors, value, statement.span);
         }
@@ -381,18 +391,20 @@ impl<'a> SemanticChecker<'a> {
     ) -> Result<(), Box<dyn IError>> {
         let expression = &switch_expression.value.expression;
         let _ = self.visit_expression(expression);
-        if let Ok(resolved_type) = self.read_last_result(expression.span) { match &switch_expression.value.alias {
-            None => {}
-            Some(id) => {
-                if let Err(err) = self.stack.declare_variable(id.value.as_str(), resolved_type, id.span) {
-                    self.errors.push(Box::new(SemanticCheckerError::at(
-                        ErrorSeverity::HIGH,
-                        err.message(),
-                        switch_expression.span,
-                    )));
+        if let Ok(resolved_type) = self.read_last_result(expression.span) {
+            match &switch_expression.value.alias {
+                None => {}
+                Some(id) => {
+                    if let Err(err) = self.stack.declare_variable(id.value.as_str(), resolved_type, id.span) {
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            err.message(),
+                            switch_expression.span,
+                        )));
+                    }
                 }
             }
-        } }
+        }
         Ok(())
     }
 }
