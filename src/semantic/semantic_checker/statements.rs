@@ -178,14 +178,12 @@ impl<'a> SemanticChecker<'a> {
                 span: identifier.span,
             });
 
-            let def_span = self
-                .stack
-                .get_variable_declaration_span(&identifier.value.as_str(), statement.span)
-                .unwrap();
-            self.definitions.push(DefinitionInfo {
-                def_span: *def_span,
-                use_span: identifier.span,
-            });
+            if let Ok(def_span) = self.stack.get_variable_declaration_span(identifier.value.as_str(), statement.span) {
+                self.definitions.push(DefinitionInfo {
+                    def_span: *def_span,
+                    use_span: identifier.span,
+                });
+            }
         } else {
             self.check_index_assignment(identifier, accessors, value, statement.span);
         }

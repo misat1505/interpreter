@@ -5,7 +5,7 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Expression, FunctionDeclaration, Node, Program},
+    frontend::ast::{DeclaredType, Expression, FunctionDeclaration, Node, Program},
     semantic::stack::stack::StaticCheckerStack,
 };
 
@@ -128,5 +128,21 @@ impl<'a> SemanticChecker<'a> {
                 span,
             )));
         }
+    }
+
+    pub(in crate::semantic::semantic_checker) fn scan_type_declaration(
+        &mut self,
+        type_declaration: &'a Node<DeclaredType>,
+    ) -> Result<(), Box<dyn IError>> {
+        match type_declaration.value {
+            DeclaredType::Struct(ref struct_declaration) => {
+                for member in &struct_declaration.members {
+                    let _ = self.visit_type(&member.value.member_type)?;
+                    let _ = self.read_last_result(member.span)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

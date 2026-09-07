@@ -50,6 +50,11 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             self.current_function_declaration = None;
             self.stack.pop_stack_frame();
         }
+
+        for (_, type_declaration) in &self.program.declared_types {
+            self.scan_type_declaration(&*type_declaration)?;
+        }
+
         Ok(())
     }
 
@@ -119,6 +124,31 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
                 }
 
                 declared_type
+            }
+            Type::Vector(inner) => {
+                let inner_type = match inner.as_ref() {
+                    Type::Unresolved(name) => {
+                        let Some(declared_type) = self.program.types.get(name).cloned() else {
+                            let err = SemanticCheckerError::at(ErrorSeverity::HIGH, format!("Unknown type `{}`.", name), node_type.span);
+
+                            self.errors.push(Box::new(err.clone()));
+                            return Err(Box::new(err));
+                        };
+
+                        if let Some(definition) = self.program.declared_types.get(name) {
+                            self.definitions.push(DefinitionInfo {
+                                use_span: node_type.span,
+                                def_span: definition.span,
+                            });
+                        }
+
+                        declared_type
+                    }
+
+                    other => other.clone(),
+                };
+
+                Type::Vector(Box::new(inner_type))
             }
             other => other.clone(),
         };
