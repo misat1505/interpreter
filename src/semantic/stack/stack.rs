@@ -103,6 +103,13 @@ impl<'a> StaticCheckerStack<'a> {
         }
     }
 
+    pub(in crate::semantic) fn get_variable_declaration_span(&mut self, name: &'a str, span: Span) -> Result<&Span, ScopeManagerError> {
+        match self.0.last_mut() {
+            Some(last_frame) => last_frame.scope_manager.get_variable_declaration_span(name, span),
+            None => unreachable!("Scope stack is empty"),
+        }
+    }
+
     pub(in crate::semantic) fn assign_variable(&mut self, name: &'a str, value: Type, span: Span) -> Result<(), ScopeManagerError> {
         if let Some(last_frame) = self.0.last_mut() {
             last_frame.scope_manager.assign_variable(name, value, span)?;

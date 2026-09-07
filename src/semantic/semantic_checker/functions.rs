@@ -5,7 +5,10 @@ use crate::{
         visitor::Visitor,
     },
     frontend::ast::{Expression, Node, Parameter, PassedBy, Statement},
-    semantic::semantic_checker::{checker::HoverInfo, SemanticChecker},
+    semantic::semantic_checker::{
+        checker::{DefinitionInfo, HoverInfo},
+        SemanticChecker,
+    },
 };
 
 pub(in crate::semantic::semantic_checker) enum FunctionCallType<'a> {
@@ -190,6 +193,10 @@ impl<'a> SemanticChecker<'a> {
                         ),
                         span: identifier.span,
                     });
+                    self.definitions.push(DefinitionInfo {
+                        use_span: identifier.span,
+                        def_span: function_declaration.span,
+                    });
                     return;
                 }
                 // user function
@@ -262,6 +269,10 @@ impl<'a> SemanticChecker<'a> {
                             function_declaration.value.return_type.value
                         ),
                         span: identifier.span,
+                    });
+                    self.definitions.push(DefinitionInfo {
+                        use_span: identifier.span,
+                        def_span: function_declaration.span,
                     });
                     return;
                 }

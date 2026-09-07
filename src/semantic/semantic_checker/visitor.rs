@@ -6,7 +6,11 @@ use crate::{
         visitor::Visitor,
     },
     frontend::ast::{Argument, Block, Expression, Literal, Node, Parameter, Program, Statement, StructLiteral, SwitchCase, SwitchExpression},
-    semantic::semantic_checker::{checker::HoverInfo, functions::FunctionCallType, SemanticChecker},
+    semantic::semantic_checker::{
+        checker::{DefinitionInfo, HoverInfo},
+        functions::FunctionCallType,
+        SemanticChecker,
+    },
 };
 use std::collections::HashSet;
 
@@ -100,13 +104,25 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
 
     fn visit_type(&mut self, node_type: &'a Node<Type>) -> Result<(), Box<dyn IError>> {
         let resolved_type = match &node_type.value {
-            Type::Unresolved(name) => self.program.types.get(name).cloned().ok_or_else(|| {
-                let err = SemanticCheckerError::at(ErrorSeverity::HIGH, format!("Unknown type `{}`.", name), node_type.span);
-                self.errors.push(Box::new(err.clone()));
-                Box::new(err) as Box<dyn IError>
-            })?,
+            Type::Unresolved(name) => {
+                let Some(declared_type) = self.program.types.get(name).cloned() else {
+                    let err = SemanticCheckerError::at(ErrorSeverity::HIGH, format!("Unknown type `{}`.", name), node_type.span);
+                    self.errors.push(Box::new(err.clone()));
+                    return Err(Box::new(err));
+                };
+
+                if let Some(definition) = self.program.declared_types.get(name) {
+                    self.definitions.push(DefinitionInfo {
+                        use_span: node_type.span,
+                        def_span: definition.span,
+                    });
+                }
+
+                declared_type
+            }
             other => other.clone(),
         };
+
         self.last_result = Some(resolved_type);
         Ok(())
     }
@@ -134,6 +150,12 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             span,
         });
         self.last_result = Some(value.clone());
+
+        let def_span = self.stack.get_variable_declaration_span(variable, span).unwrap();
+        self.definitions.push(DefinitionInfo {
+            use_span: span,
+            def_span: *def_span,
+        });
         Ok(())
     }
 

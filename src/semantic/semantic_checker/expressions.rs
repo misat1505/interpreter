@@ -7,7 +7,11 @@ use crate::{
     },
     frontend::ast::{Accessor, Expression, Node},
     semantic::{
-        semantic_checker::{checker::HoverInfo, functions::FunctionCallType, SemanticChecker},
+        semantic_checker::{
+            checker::{DefinitionInfo, HoverInfo},
+            functions::FunctionCallType,
+            SemanticChecker,
+        },
         type_alu::TypeALU,
     },
 };
@@ -31,6 +35,15 @@ impl<'a> SemanticChecker<'a> {
         self.hovers.push(HoverInfo {
             contents: format!("```raptor\n{} {}\n```", current_type, identifier.value),
             span: identifier.span,
+        });
+
+        let def_span = self
+            .stack
+            .get_variable_declaration_span(identifier.value.as_str(), identifier.span)
+            .unwrap();
+        self.definitions.push(DefinitionInfo {
+            use_span: identifier.span,
+            def_span: *def_span,
         });
         for accessor in accessors {
             match &accessor.value {

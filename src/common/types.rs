@@ -35,23 +35,23 @@ pub enum Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Bool => Ok(write!(f, "bool")?),
-            Type::I8 => Ok(write!(f, "i8")?),
-            Type::I16 => Ok(write!(f, "i16")?),
-            Type::I32 => Ok(write!(f, "i32")?),
-            Type::I64 => Ok(write!(f, "i64")?),
-            Type::U8 => Ok(write!(f, "u8")?),
-            Type::U16 => Ok(write!(f, "u16")?),
-            Type::U32 => Ok(write!(f, "u32")?),
-            Type::U64 => Ok(write!(f, "u64")?),
-            Type::F64 => Ok(write!(f, "f64")?),
-            Type::Str => Ok(write!(f, "str")?),
-            Type::Char => Ok(write!(f, "char")?),
-            Type::Void => Ok(write!(f, "void")?),
+            Type::Bool => write!(f, "bool"),
+            Type::I8 => write!(f, "i8"),
+            Type::I16 => write!(f, "i16"),
+            Type::I32 => write!(f, "i32"),
+            Type::I64 => write!(f, "i64"),
+            Type::U8 => write!(f, "u8"),
+            Type::U16 => write!(f, "u16"),
+            Type::U32 => write!(f, "u32"),
+            Type::U64 => write!(f, "u64"),
+            Type::F64 => write!(f, "f64"),
+            Type::Str => write!(f, "str"),
+            Type::Char => write!(f, "char"),
+            Type::Void => write!(f, "void"),
             Type::Vector(inner) => write!(f, "{}[]", inner),
             Type::Struct { identifier, .. } => write!(f, "{}", identifier),
             Type::Unresolved(name) => write!(f, "Unresolved({})", name),
-            Type::Any => Ok(write!(f, "any")?),
+            Type::Any => write!(f, "any"),
         }
     }
 }

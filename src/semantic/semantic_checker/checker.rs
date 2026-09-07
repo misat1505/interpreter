@@ -15,12 +15,19 @@ pub struct HoverInfo {
     pub contents: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct DefinitionInfo {
+    pub use_span: Span,
+    pub def_span: Span,
+}
+
 pub struct SemanticChecker<'a> {
     pub(in crate::semantic::semantic_checker) program: &'a Program,
     pub(in crate::semantic::semantic_checker) stack: StaticCheckerStack<'a>,
     pub(in crate::semantic::semantic_checker) last_result: Option<Type>,
     pub errors: Vec<Box<dyn IError>>,
     pub hovers: Vec<HoverInfo>,
+    pub definitions: Vec<DefinitionInfo>,
     pub(in crate::semantic::semantic_checker) current_function_declaration: Option<FunctionDeclaration>,
 }
 
@@ -30,6 +37,7 @@ impl<'a> SemanticChecker<'a> {
             program,
             errors: vec![],
             hovers: vec![],
+            definitions: vec![],
             stack: StaticCheckerStack::new(),
             last_result: None,
             current_function_declaration: None,
