@@ -140,7 +140,7 @@ impl<L: ILexer> Parser<L> {
 
     pub(in crate::frontend::parser) fn parse_program_statement(&mut self) -> Result<Option<Node<Statement>>, Box<dyn IError>> {
         // program_statement = import_declaration | assign_or_call | if_statement | for_statement | while_statement
-        //                    | switch_statement | (declaration, ";") | let_declaration;
+        //                    | switch_statement | (declaration, ";") | let_declaration | match_statement;
         let generators = [
             Self::parse_assign_or_call,
             Self::parse_if_statement,
@@ -150,6 +150,7 @@ impl<L: ILexer> Parser<L> {
             Self::parse_variable_declaration,
             Self::parse_let_variable_declaration,
             Self::parse_import_declaration,
+            Self::parse_match_statement,
         ];
 
         for generator in &generators {
@@ -173,6 +174,7 @@ impl<L: ILexer> Parser<L> {
             Self::parse_continue_statement,
             Self::parse_variable_declaration,
             Self::parse_let_variable_declaration,
+            Self::parse_match_statement,
         ];
 
         for generator in &generators {

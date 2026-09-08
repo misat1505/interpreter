@@ -394,6 +394,7 @@ impl<'a> Interpreter<'a> {
             Statement::Continue => {
                 self.abort_state = Some(AbortState::Continue);
             }
+            Statement::Match { .. } => todo!(),
         }
 
         Ok(())

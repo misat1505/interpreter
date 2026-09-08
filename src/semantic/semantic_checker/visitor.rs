@@ -77,6 +77,7 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             Statement::Return { .. } => self.check_return(statement)?,
             Statement::Break => self.check_break(statement)?,
             Statement::Continue => self.check_continue(statement)?,
+            Statement::Match { .. } => todo!(),
         }
         Ok(())
     }

@@ -9,15 +9,15 @@ enum Task {
 let task = Task::InProgress(today);
 let aborted_task = Task::Aborted;
 
-# match (task) {
-#     Task::InProgress(deadline) {
-#         #  deadline: Deadline - available only in this scope
-#     },
-#     Task::Aborted {
-#         # Aborted doesn't contain any data
-#     },
-#     rest {
-#         # have to match all the arms
-#         # use else to catch the rest
-#     }
-# };
+match (task) {
+    Task::InProgress(deadline) {
+        #  deadline: Deadline - available only in this scope
+    },
+    Task::Aborted {
+        # Aborted doesn't contain any data
+    },
+    rest {
+        # have to match all the arms
+        # use else to catch the rest
+    }
+}

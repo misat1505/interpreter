@@ -2,9 +2,32 @@
 
 ### Syntax Part
 
-**program** = { import_declaration | struct_declaration | enum_declaration | function_declaration | extern_function_declaration | assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration };
+**program** = { import_declaration | struct_declaration | enum_declaration | function_declaration | extern_function_declaration | assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration | match_statement };
 
 **comment** = "#" , {unicode_character - "\n"}, "\n";
+
+**match_statement** = "match", "(", expression, ")", "{", match_arms, [ ",", rest_arm ], "}";
+
+```
+match (task) {
+    Task::InProgress(deadline) {
+        #  deadline: Deadline - available only in this scope
+    },
+    Task::Aborted {
+        # Aborted doesn't contain any data
+    },
+    rest {
+        # have to match all the arms
+        # use else to catch the rest
+    }
+}
+```
+
+**match_arms** = [ match_arm, { ",", match_arm } ];
+
+**match_arm** = identifier, "::", identifier, [ "(", identifier, ")" ], statement_block;
+
+**rest_arm** = "rest", statement_block;
 
 **import_declaration** = "import", literal, ";";
 ```
@@ -66,7 +89,7 @@ fn add(i64 a, i64 b): i64 {
 
 **statement_block** = ("{", {statement}, "}") | statement;
 
-**statement** = assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration | return_statement | break_statement | continue_statement;
+**statement** = assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration | return_statement | break_statement | continue_statement | match_statement;
 
 **assign_or_call_without_semicolon** = identifier, ( { access_tail }, ("=" | "+=" | "-=" | "*=" | "/=" | "%="), expression | "(", arguments, ")");
 

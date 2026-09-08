@@ -162,6 +162,19 @@ pub enum Statement {
     Import {
         path: Node<String>,
     },
+    Match {
+        expression: Node<Expression>,
+        match_arms: Vec<Node<MatchArm>>,
+        rest_arm: Option<Node<Block>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub enum_name: Node<String>,
+    pub variant_name: Node<String>,
+    pub variant_value: Option<Node<String>>,
+    pub block: Node<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

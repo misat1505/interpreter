@@ -502,6 +502,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             Statement::Switch { expressions, cases } => self.compile_switch(expressions, cases),
+            Statement::Match { .. } => todo!(),
         }
     }
 
