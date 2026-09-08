@@ -125,7 +125,12 @@ impl<'a> SemanticChecker<'a> {
                     };
 
                     let DeclaredType::Struct(struct_declaration) = &type_declaration.value else {
-                        todo!()
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            String::from("Cannot access a field of this type."),
+                            field.span,
+                        )));
+                        return;
                     };
 
                     let Some(member_declaration) = struct_declaration
@@ -297,7 +302,12 @@ impl<'a> SemanticChecker<'a> {
                     return Ok(());
                 };
                 let DeclaredType::Struct(struct_declaration) = &type_declaration.value else {
-                    todo!()
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        String::from("Cannot access a field of this type."),
+                        field.span,
+                    )));
+                    return Ok(());
                 };
                 let Some(member_declaration) = struct_declaration
                     .members
@@ -316,7 +326,79 @@ impl<'a> SemanticChecker<'a> {
                     def_span: member_declaration.value.identifier.span,
                 });
             }
-            Expression::EnumLiteral { .. } => todo!(),
+            Expression::EnumLiteral {
+                variant_name,
+                variant_value,
+                enum_name,
+            } => {
+                let Some(Type::Enum {
+                    fields: declared_variants, ..
+                }) = self.program.types.get(&enum_name.value)
+                else {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Use of undeclared type '{}'.", enum_name.value),
+                        enum_name.span,
+                    )));
+                    return Ok(());
+                };
+
+                let Some(expected_type) = declared_variants.get(&variant_name.value) else {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Enum '{}' doesn't have field '{}'.", enum_name.value, variant_name.value),
+                        enum_name.span,
+                    )));
+                    return Ok(());
+                };
+
+                match (expected_type, variant_value) {
+                    (Some(t), Some(var_node)) => {
+                        let resolved_expected_type = self.resolve_type_fully_checked(t, var_node.span)?;
+                        self.visit_expression(var_node)?;
+                        let actual_type = self.read_last_result(var_node.span)?;
+                        let resolved_type = self.resolve_type_fully_checked(&actual_type, var_node.span)?;
+                        if !resolved_expected_type.is_compatible(&resolved_type) {
+                            self.errors.push(Box::new(SemanticCheckerError::at(
+                                ErrorSeverity::HIGH,
+                                format!(
+                                    "Enum '{}' variant '{}' expects value of type '{}', found '{}'.",
+                                    enum_name.value, variant_name.value, resolved_expected_type, resolved_type
+                                ),
+                                enum_name.span,
+                            )));
+                            return Ok(());
+                        }
+                    }
+                    (None, None) => {}
+                    (Some(expected), None) => {
+                        let resolved_expected_type = self.resolve_type_fully_checked(expected, expression.span)?;
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            format!(
+                                "Enum '{}' variant '{}' expected value of type '{}'.",
+                                enum_name.value, variant_name.value, resolved_expected_type
+                            ),
+                            enum_name.span,
+                        )));
+                        return Ok(());
+                    }
+                    (None, Some(var_node)) => {
+                        self.visit_expression(var_node)?;
+                        let actual_type = self.read_last_result(var_node.span)?;
+                        let resolved_type = self.resolve_type_fully_checked(&actual_type, var_node.span)?;
+                        self.errors.push(Box::new(SemanticCheckerError::at(
+                            ErrorSeverity::HIGH,
+                            format!(
+                                "Enum '{}' variant '{}' doesn't expecte any value. Provided '{}'.",
+                                enum_name.value, variant_name.value, resolved_type
+                            ),
+                            enum_name.span,
+                        )));
+                        return Ok(());
+                    }
+                }
+            }
         }
         Ok(())
     }

@@ -1,12 +1,16 @@
 # This is a concept file. It doesn't work for now
 
+struct Deadline {
+    str date
+};
+
 enum Task {
     InProgress(Deadline),
     Completed(str),
     Aborted
 };
 
-let task = Task::InProgress(today);
+let task = Task::InProgress(Deadline { date: "today" });
 let aborted_task = Task::Aborted;
 
 match (task) {

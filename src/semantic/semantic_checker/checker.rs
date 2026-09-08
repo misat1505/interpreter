@@ -141,7 +141,14 @@ impl<'a> SemanticChecker<'a> {
                     let _ = self.read_last_result(member.span)?;
                 }
             }
-            DeclaredType::Enum(_) => todo!(),
+            DeclaredType::Enum(ref enum_declaration) => {
+                for member in &enum_declaration.members {
+                    if let Some(ref member_type) = member.value.member_type {
+                        self.visit_type(&member_type)?;
+                        let _ = self.read_last_result(member.span)?;
+                    }
+                }
+            }
         }
 
         Ok(())

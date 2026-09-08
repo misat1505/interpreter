@@ -77,7 +77,7 @@ impl<'a> Visitor<'a> for SemanticChecker<'a> {
             Statement::Return { .. } => self.check_return(statement)?,
             Statement::Break => self.check_break(statement)?,
             Statement::Continue => self.check_continue(statement)?,
-            Statement::Match { .. } => todo!(),
+            Statement::Match { .. } => self.check_match_statement(statement)?,
         }
         Ok(())
     }
@@ -289,7 +289,12 @@ impl<'a> SemanticChecker<'a> {
             };
 
             let DeclaredType::Struct(struct_declaration) = &type_declaration.value else {
-                todo!()
+                self.errors.push(Box::new(SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    String::from("Cannot access a field of this type."),
+                    field.span,
+                )));
+                return Ok(());
             };
 
             let Some(member_declaration) = struct_declaration

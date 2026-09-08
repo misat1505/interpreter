@@ -407,4 +407,137 @@ impl<'a> SemanticChecker<'a> {
         }
         Ok(())
     }
+
+    pub(in crate::semantic::semantic_checker) fn check_match_statement(
+        &mut self,
+        match_statement: &'a Node<Statement>,
+    ) -> Result<(), Box<dyn IError>> {
+        let Statement::Match {
+            ref expression,
+            ref match_arms,
+            ref rest_arm,
+        } = match_statement.value
+        else {
+            unreachable!();
+        };
+
+        self.visit_expression(&expression)?;
+        let actual_type = self.read_last_result(expression.span)?;
+        let resolved_type = self.resolve_type_fully_checked(&actual_type, expression.span)?;
+
+        let Type::Enum {
+            identifier: declared_enum_ident,
+            fields: declared_fields,
+        } = resolved_type
+        else {
+            self.errors.push(Box::new(SemanticCheckerError::at(
+                ErrorSeverity::HIGH,
+                format!("Cannot 'match' non-enum expression of type '{}'.", resolved_type),
+                expression.span,
+            )));
+
+            return Ok(());
+        };
+
+        let mut visited_fields: Vec<String> = vec![];
+
+        for match_arm in match_arms.iter() {
+            if match_arm.value.enum_name.value != declared_enum_ident {
+                self.errors.push(Box::new(SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    format!(
+                        "Cannot 'match' non-matching enum. Expected '{}', got: '{}'.",
+                        declared_enum_ident, match_arm.value.enum_name.value
+                    ),
+                    expression.span,
+                )));
+
+                continue;
+            }
+
+            if visited_fields
+                .iter()
+                .find(|field| **field == match_arm.value.variant_name.value)
+                .is_some()
+            {
+                self.errors.push(Box::new(SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    format!("Multiple arms for variant '{}'.", match_arm.value.variant_name.value),
+                    expression.span,
+                )));
+            }
+
+            let Some(declared_field) = declared_fields.get(&match_arm.value.variant_name.value) else {
+                self.errors.push(Box::new(SemanticCheckerError::at(
+                    ErrorSeverity::HIGH,
+                    format!(
+                        "Enum '{}' doesn't have variant '{}'.",
+                        declared_enum_ident, match_arm.value.variant_name.value
+                    ),
+                    expression.span,
+                )));
+
+                visited_fields.push(match_arm.value.variant_name.value.clone());
+
+                continue;
+            };
+
+            visited_fields.push(match_arm.value.variant_name.value.clone());
+
+            match (declared_field, match_arm.value.variant_value.as_ref()) {
+                (None, Some(_)) => {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!(
+                            "Enum '{}' variant '{}' doesn't contain any value.",
+                            declared_enum_ident, match_arm.value.variant_name.value
+                        ),
+                        match_arm.value.variant_name.span,
+                    )));
+                    return Ok(());
+                }
+                (Some(t), Some(var_node)) => {
+                    let resolved_type = self.resolve_type_fully_checked(t, var_node.span)?;
+
+                    self.stack.push_scope();
+                    self.stack
+                        .declare_variable(&var_node.value, resolved_type, var_node.span)
+                        .map_err(|e| -> Box<dyn IError> { Box::new(e) })?;
+                    self.visit_block(&match_arm.value.block)?;
+                    self.stack.pop_scope();
+                }
+                (_, _) => self.visit_block(&match_arm.value.block)?,
+            }
+        }
+
+        match rest_arm {
+            Some(block) => {
+                let all_variants_covered = declared_fields.keys().all(|variant| visited_fields.contains(variant));
+
+                if all_variants_covered {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::LOW,
+                        "The 'rest' arm is unnecessary because all enum variants are already matched.".to_string(),
+                        block.span,
+                    )));
+                }
+
+                self.visit_block(block)?;
+            }
+
+            None => {
+                let missing_variant = declared_fields.keys().find(|variant| !visited_fields.contains(variant));
+
+                if let Some(variant) = missing_variant {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Match is missing enum variant '{}'.", variant),
+                        match_statement.span,
+                    )));
+                }
+            }
+        };
+
+        Ok(())
+    }
 }
