@@ -11,6 +11,9 @@
       "include": "#keywords"
     },
     {
+      "include": "#enum-variants"
+    },
+    {
       "include": "#types"
     },
     {
@@ -65,6 +68,21 @@
         }
       ]
     },
+    "enum-variants": {
+      "patterns": [
+        {
+          "match": "\\b([A-Z][a-zA-Z0-9_]*)::([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.rp"
+            },
+            "2": {
+              "name": "variable.other.enummember.rp"
+            }
+          }
+        }
+      ]
+    },
     "constants": {
       "patterns": [
         {
@@ -76,12 +94,12 @@
     "types": {
       "patterns": [
         {
-          "name": "entity.name.type.rp",
+          "name": "entity.name.type.primitive.rp",
           "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f64|bool|str|char|void)\\b"
         },
         {
           "name": "entity.name.type.rp",
-          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+          "match": "(?<!::)\\b[A-Z][a-zA-Z0-9_]*\\b"
         }
       ]
     },
@@ -105,11 +123,11 @@
       "patterns": [
         {
           "name": "entity.name.function.rp",
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?=\\()"
         },
         {
           "name": "entity.name.function.definition.rp",
-          "match": "(?<=\\bfn\\s+)([a-zA-Z_][a-zA-Z0-9_]*)"
+          "match": "(?<=\\bfn\\s+)[a-zA-Z_][a-zA-Z0-9_]*"
         }
       ]
     },
@@ -117,7 +135,7 @@
       "patterns": [
         {
           "name": "variable.other.rp",
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b"
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
         }
       ]
     }
