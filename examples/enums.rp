@@ -1,4 +1,4 @@
-# This is a concept file. It doesn't work for now
+# This is a concept file. It typechecks for now, but is not executable in any mode.
 
 struct Deadline {
     str date
@@ -10,18 +10,31 @@ enum Task {
     Aborted
 };
 
-let task = Task::InProgress(Deadline { date: "today" });
-let aborted_task = Task::Aborted;
+struct TaskRepository {
+    Task[] tasks
+};
 
-match (task) {
-    Task::InProgress(deadline) {
-        #  deadline: Deadline - available only in this scope
-    },
-    Task::Aborted {
-        # Aborted doesn't contain any data
-    },
-    rest {
-        # have to match all the arms
-        # use else to catch the rest
+let repo = TaskRepository {
+    tasks: [
+        Task::InProgress(Deadline { date: "today" }),
+        Task::Completed("completed"),
+        Task::Aborted
+    ]
+};
+
+for (let i = 0; i < vector_size(&repo.tasks); i += 1) {
+    let task = repo.tasks[i];
+
+    match (task) {
+        Task::InProgress(deadline) {
+            #  deadline: Deadline - available only in this scope
+        },
+        Task::Aborted {
+            # Aborted doesn't contain any data
+        },
+        rest {
+            # have to match all the arms
+            # use else to catch the rest
+        }
     }
 }

@@ -369,8 +369,11 @@ impl<'a> SemanticChecker<'a> {
                             )));
                             return Ok(());
                         }
+                        self.last_result = Some(self.resolve_type_fully_checked(self.program.types.get(&enum_name.value).unwrap(), expression.span)?);
                     }
-                    (None, None) => {}
+                    (None, None) => {
+                        self.last_result = Some(self.resolve_type_fully_checked(self.program.types.get(&enum_name.value).unwrap(), expression.span)?);
+                    }
                     (Some(expected), None) => {
                         let resolved_expected_type = self.resolve_type_fully_checked(expected, expression.span)?;
                         self.errors.push(Box::new(SemanticCheckerError::at(
@@ -390,7 +393,7 @@ impl<'a> SemanticChecker<'a> {
                         self.errors.push(Box::new(SemanticCheckerError::at(
                             ErrorSeverity::HIGH,
                             format!(
-                                "Enum '{}' variant '{}' doesn't expecte any value. Provided '{}'.",
+                                "Enum '{}' variant '{}' doesn't expect any value. Provided '{}'.",
                                 enum_name.value, variant_name.value, resolved_type
                             ),
                             enum_name.span,

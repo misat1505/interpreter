@@ -501,9 +501,14 @@ impl<'a> SemanticChecker<'a> {
 
                     self.stack.push_scope();
                     self.stack
-                        .declare_variable(&var_node.value, resolved_type, var_node.span)
+                        .declare_variable(&var_node.value, resolved_type.clone(), var_node.span)
                         .map_err(|e| -> Box<dyn IError> { Box::new(e) })?;
+                    self.hovers.push(HoverInfo {
+                        contents: format!("```raptor\n{} {}\n```", resolved_type, var_node.value),
+                        span: var_node.span,
+                    });
                     self.visit_block(&match_arm.value.block)?;
+                    self.unused_variables_in_last_scope_warn();
                     self.stack.pop_scope();
                 }
                 (_, _) => self.visit_block(&match_arm.value.block)?,
