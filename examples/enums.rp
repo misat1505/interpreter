@@ -1,17 +1,23 @@
 # This is a concept file. It doesn't work for now
 
-# enum Task {
-#   InProgress(Deadline),
-#   Completed(CompletionTimestamp)
-# };
+enum Task {
+    InProgress(Deadline),
+    Completed(str),
+    Aborted
+};
 
-# let task = Task();
-# switch (task) {
-#   case InProgress(deadline) {
-#     #  deadline: Deadline - available only in this scope
-#   }
-#   case Completed(timestamp) {
-#     #  timestamp: CompletionTimestamp
-#   }
-#   # have to match all the arms
-# };
+let task = Task::InProgress(today);
+match (task) {
+    Task::InProgress(deadline) {
+        #  deadline: Deadline - available only in this scope
+    },
+    Task::Aborted {
+        # Aborted doesn't contain any data
+    },
+    rest {
+        # have to match all the arms
+        # use else to catch the rest
+    }
+};
+
+let aborted_task = Task::Aborted;

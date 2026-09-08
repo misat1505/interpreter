@@ -22,6 +22,22 @@ pub fn resolve_declared_types(declared_types: &HashMap<String, Rc<Node<DeclaredT
                     fields,
                 })
             }
+            DeclaredType::Enum(enum_declaration) => {
+                let mut fields = HashMap::new();
+
+                for member in &enum_declaration.members {
+                    let field_type = match member.value.member_type {
+                        Some(ref t) => Some(t.value.clone()),
+                        None => None,
+                    };
+                    fields.insert(member.value.identifier.value.clone(), field_type.clone());
+                }
+
+                Ok(Type::Enum {
+                    identifier: enum_declaration.identifier.value.clone(),
+                    fields,
+                })
+            }
         }?;
         types.insert(name.clone(), resolved_type);
     }

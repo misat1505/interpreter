@@ -4,6 +4,7 @@ use crate::{
 };
 
 mod core;
+mod enums;
 mod expressions;
 mod functions;
 mod misc;

@@ -20,6 +20,10 @@ pub enum Type {
         identifier: String,
         fields: HashMap<String, Type>,
     },
+    Enum {
+        identifier: String,
+        fields: HashMap<String, Option<Type>>,
+    },
     // Internal, not available for the user. Placeholder created by the parser
     // when it encounters an identifier in type position (e.g. `Hobby[] hobbies`)
     // before it's known whether that name refers to a real declared type.
@@ -50,6 +54,7 @@ impl Display for Type {
             Type::Void => write!(f, "void"),
             Type::Vector(inner) => write!(f, "{}[]", inner),
             Type::Struct { identifier, .. } => write!(f, "{}", identifier),
+            Type::Enum { identifier, .. } => write!(f, "{}", identifier),
             Type::Unresolved(name) => write!(f, "Unresolved({})", name),
             Type::Any => write!(f, "any"),
         }

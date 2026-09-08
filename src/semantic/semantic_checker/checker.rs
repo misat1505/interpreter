@@ -141,6 +141,7 @@ impl<'a> SemanticChecker<'a> {
                     let _ = self.read_last_result(member.span)?;
                 }
             }
+            DeclaredType::Enum(_) => todo!(),
         }
 
         Ok(())

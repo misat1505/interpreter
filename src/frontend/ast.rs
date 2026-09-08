@@ -210,8 +210,21 @@ pub struct StructDeclaration {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct EnumMember {
+    pub identifier: Node<String>,
+    pub member_type: Option<Node<Type>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumDeclaration {
+    pub identifier: Node<String>,
+    pub members: Vec<Node<EnumMember>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum DeclaredType {
     Struct(StructDeclaration),
+    Enum(EnumDeclaration),
 }
 
 #[derive(Debug, Clone, PartialEq)]

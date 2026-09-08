@@ -124,7 +124,9 @@ impl<'a> SemanticChecker<'a> {
                         return;
                     };
 
-                    let DeclaredType::Struct(struct_declaration) = &type_declaration.value;
+                    let DeclaredType::Struct(struct_declaration) = &type_declaration.value else {
+                        todo!()
+                    };
 
                     let Some(member_declaration) = struct_declaration
                         .members
@@ -294,7 +296,9 @@ impl<'a> SemanticChecker<'a> {
                     )));
                     return Ok(());
                 };
-                let DeclaredType::Struct(struct_declaration) = &type_declaration.value;
+                let DeclaredType::Struct(struct_declaration) = &type_declaration.value else {
+                    todo!()
+                };
                 let Some(member_declaration) = struct_declaration
                     .members
                     .iter()

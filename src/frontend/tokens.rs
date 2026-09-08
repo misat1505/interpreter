@@ -83,6 +83,10 @@ pub enum TokenCategory {
     Let,
     Struct,
     Dot,
+
+    Enum,
+    Match,
+    Rest,
 }
 
 impl Display for TokenCategory {
@@ -159,6 +163,9 @@ impl Display for TokenCategory {
             Let => "let",
             Struct => "struct",
             Dot => "dot",
+            Enum => "enum",
+            Match => "match",
+            Rest => "rest",
         };
 
         Ok(write!(f, "{}", text)?)

@@ -2,7 +2,7 @@
 
 ### Syntax Part
 
-**program** = { import_declaration | struct_declaration | function_declaration | extern_function_declaration | assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration };
+**program** = { import_declaration | struct_declaration | enum_declaration | function_declaration | extern_function_declaration | assign_or_call | if_statement | for_statement | while_statement | switch_statement | (declaration, ";") | let_declaration };
 
 **comment** = "#" , {unicode_character - "\n"}, "\n";
 
@@ -27,6 +27,19 @@ struct Person {
 **struct_members** = struct_member, { ",", struct_member };
 
 **struct_member** = type, identifier;
+
+**enum_declaration** = "enum", identifier, "{", [ enum_members ], "}", ";";
+```text
+enum Task {
+    InProgress(Deadline),
+    Completed(str),
+    Aborted
+};
+```
+
+**enum_members** = enum_member, { ",", enum_member };
+
+**enum_member** = identifier, [ "(", type, ")" ];
 
 **extern_function_declaration** = "extern", "fn", identifier, "(", parameters, ")", ":", type | "void", [ "as", identifier ] ";";
 
