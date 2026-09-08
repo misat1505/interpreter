@@ -72,6 +72,11 @@ pub enum Expression {
         arguments: Vec<BNode<Argument>>,
     },
     StructLiteral(Node<StructLiteral>),
+    EnumLiteral {
+        enum_name: Node<String>,
+        variant_name: Node<String>,
+        variant_value: Option<BNode<Expression>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

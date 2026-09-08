@@ -4,7 +4,7 @@ pub mod casted_term;
 pub mod concatenation_term;
 pub mod expression;
 pub mod factor;
-pub mod identifier_or_call;
+pub mod identifier_or_call_or_struct_literal_or_enum_literal;
 pub mod literal;
 pub mod multiplicative_term;
 pub mod relation_term;

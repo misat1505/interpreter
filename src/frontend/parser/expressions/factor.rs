@@ -10,7 +10,7 @@ use crate::{
 
 impl<L: ILexer> Parser<L> {
     pub(in crate::frontend::parser) fn parse_factor(&mut self) -> Result<Option<Node<Expression>>, Box<dyn IError>> {
-        // factor = literal | ( "(", expression, ")" ) | vector_literal | identifier_or_call_or_struct_literal;
+        // factor = literal | ( "(", expression, ")" ) | vector_literal | identifier_or_call_or_struct_literal_or_enum_literal;
         if let Ok(Some(literal)) = self.parse_literal() {
             let node = Node {
                 value: Expression::Literal(literal.value),
@@ -32,6 +32,6 @@ impl<L: ILexer> Parser<L> {
             return Ok(Some(vector));
         }
 
-        self.parse_identifier_or_call_or_struct_literal()
+        self.identifier_or_call_or_struct_literal_or_enum_literal()
     }
 }

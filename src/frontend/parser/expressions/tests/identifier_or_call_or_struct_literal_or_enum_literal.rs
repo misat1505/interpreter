@@ -32,7 +32,7 @@ fn parse_identifier_or_call_fail() {
         let mock_lexer = LexerMock::new(token_series[idx].clone());
         let mut parser = Parser::new(mock_lexer);
 
-        assert!(parser.parse_identifier_or_call_or_struct_literal().is_err());
+        assert!(parser.identifier_or_call_or_struct_literal_or_enum_literal().is_err());
     }
 }
 
@@ -104,7 +104,7 @@ fn parse_identifier_or_call() {
         let mock_lexer = LexerMock::new(series.to_vec());
         let mut parser = Parser::new(mock_lexer);
 
-        let node = parser.parse_identifier_or_call_or_struct_literal().unwrap().unwrap();
+        let node = parser.identifier_or_call_or_struct_literal_or_enum_literal().unwrap().unwrap();
         assert_eq!(node.value, expected[idx]);
     }
 }
@@ -151,7 +151,7 @@ fn parse_identifier_or_call_with_index() {
         let mock_lexer = LexerMock::new(series.to_vec());
         let mut parser = Parser::new(mock_lexer);
 
-        let node = parser.parse_identifier_or_call_or_struct_literal().unwrap().unwrap();
+        let node = parser.identifier_or_call_or_struct_literal_or_enum_literal().unwrap().unwrap();
         assert_eq!(node.value, expected[idx]);
     }
 }

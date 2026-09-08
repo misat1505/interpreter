@@ -9,15 +9,53 @@ use crate::{
 };
 
 impl<L: ILexer> Parser<L> {
-    pub(in crate::frontend::parser) fn parse_identifier_or_call_or_struct_literal(&mut self) -> Result<Option<Node<Expression>>, Box<dyn IError>> {
-        // identifier_or_call_or_struct_literal = identifier, ( call_or_index_tail | struct_literal_tail );
+    pub(in crate::frontend::parser) fn identifier_or_call_or_struct_literal_or_enum_literal(
+        &mut self,
+    ) -> Result<Option<Node<Expression>>, Box<dyn IError>> {
+        // identifier_or_call_or_struct_literal_or_enum_literal = identifier, ( call_or_index_tail | struct_literal_tail | enum_literal_tail );
         let identifier = try_consume!(self, parse_identifier);
 
         if self.current_token().category == TokenCategory::BraceOpen {
             return Ok(Some(self.parse_struct_literal_tail(identifier)?));
+        } else if self.current_token().category == TokenCategory::DoubleColon {
+            return Ok(Some(self.parse_enum_literal_tail(identifier)?));
         }
 
         self.parse_call_or_index_tail(identifier)
+    }
+
+    fn parse_enum_literal_tail(&mut self, enum_name: Node<String>) -> Result<Node<Expression>, Box<dyn IError>> {
+        // enum_literal_tail = "::", identifier, [ "(", expression, ")" ];
+        let start = enum_name.span.start();
+
+        self.consume_must_be(TokenCategory::DoubleColon)?;
+
+        let variant_name = self
+            .parse_identifier()?
+            .ok_or_else(|| self.create_parser_error(format!("Expected an identifier after '{}'.", TokenCategory::DoubleColon)))?;
+
+        let mut variant_value: Option<Box<Node<Expression>>> = None;
+        let mut end_pos = variant_name.span.end();
+
+        if self.consume_if_matches(TokenCategory::ParenOpen)?.is_some() {
+            let expr = self
+                .parse_expression()?
+                .ok_or_else(|| self.create_parser_error(String::from("Expected an expression in enum variant value.")))?;
+
+            variant_value = Some(Box::new(expr));
+
+            let paren_close_token = self.consume_must_be(TokenCategory::ParenClose)?;
+            end_pos = paren_close_token.span.end();
+        }
+
+        Ok(Node {
+            value: Expression::EnumLiteral {
+                enum_name,
+                variant_name,
+                variant_value,
+            },
+            span: Span::new(start, end_pos),
+        })
     }
 
     fn parse_call_or_index_tail(&mut self, identifier: Node<String>) -> Result<Option<Node<Expression>>, Box<dyn IError>> {

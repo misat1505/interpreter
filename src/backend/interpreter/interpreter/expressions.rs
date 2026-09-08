@@ -54,6 +54,7 @@ impl<'a> Interpreter<'a> {
             Expression::Index { collection, index } => self.eval_index(collection, index)?,
             Expression::StructLiteral(node) => self.eval_struct_literal(&node.value.identifier, &node.value.fields, expression.span)?,
             Expression::FieldAccess { instance, field } => self.eval_field_access(instance, field)?,
+            Expression::EnumLiteral { .. } => todo!(),
         }
 
         Ok(())

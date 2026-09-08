@@ -439,6 +439,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.last_value = Some(field_value);
                 Ok(())
             }
+            Expression::EnumLiteral { .. } => todo!(),
         }
     }
 

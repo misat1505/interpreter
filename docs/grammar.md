@@ -234,7 +234,7 @@ x * 10 % 3
 !(x == 5)
 ```
 
-**factor** = literal | ( "(", expression, ")" ) | identifier_or_call_or_struct_literal | vector_literal;
+**factor** = literal | ( "(", expression, ")" ) | identifier_or_call_or_struct_literal_or_enum_literal | vector_literal;
 
 ```text
 5
@@ -260,7 +260,7 @@ fun(5)
 ]
 ```
 
-**identifier_or_call_or_struct_literal** = identifier, ( call_or_index_tail | struct_literal_tail );
+**identifier_or_call_or_struct_literal_or_enum_literal** = identifier, ( call_or_index_tail | struct_literal_tail | enum_literal_tail );
 ```text
 x
 fun(5)
@@ -272,9 +272,10 @@ Person { id: 123 as u64, name: "Bob" }
 Hobby { id: 1, description: "Play football" }
 
 person.hobbies[0].description
+
+HttpStatus::NotFound("user not found")
 ```
 
-<!-- **call_or_index_tail** = [ "(", arguments, ")" ], { "[", expression, "]" }; -->
 **call_or_index_tail** = [ "(", arguments, ")" ], { access_tail };
 **access_tail** = ("[", expression, "]") | (".", identifier);
 
@@ -284,6 +285,7 @@ person.hobbies[0].description
 
 **struct_literal_field** = identifier, ":", expression;
 
+**enum_literal_tail** = "::", identifier, [ "(", expression, ")" ];
 
 **literal** = integer_literal | float_literal | boolean_literal | string_literal | char_literal;
 

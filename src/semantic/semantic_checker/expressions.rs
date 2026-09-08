@@ -316,6 +316,7 @@ impl<'a> SemanticChecker<'a> {
                     def_span: member_declaration.value.identifier.span,
                 });
             }
+            Expression::EnumLiteral { .. } => todo!(),
         }
         Ok(())
     }
