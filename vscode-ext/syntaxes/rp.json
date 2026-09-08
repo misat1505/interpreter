@@ -11,6 +11,9 @@
       "include": "#keywords"
     },
     {
+      "include": "#enum-definitions"
+    },
+    {
       "include": "#enum-variants"
     },
     {
@@ -65,6 +68,63 @@
         {
           "name": "keyword.control.rp",
           "match": "\\b(fn|extern|if|else|for|while|switch|return|break|continue|import|as|match|rest)\\b"
+        }
+      ]
+    },
+    "enum-definitions": {
+      "patterns": [
+        {
+          "begin": "\\b(enum)\\s+([A-Z][a-zA-Z0-9_]*)\\s*\\{",
+          "beginCaptures": {
+            "1": {
+              "name": "constant.language.rp"
+            },
+            "2": {
+              "name": "entity.name.type.rp"
+            }
+          },
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#enum-variant-definition"
+            },
+            {
+              "include": "#types"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#constants"
+            },
+            {
+              "include": "#operators"
+            },
+            {
+              "include": "#functions"
+            },
+            {
+              "include": "#variables"
+            }
+          ]
+        }
+      ]
+    },
+    "enum-variant-definition": {
+      "patterns": [
+        {
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "variable.other.enummember.rp"
+            }
+          }
         }
       ]
     },
