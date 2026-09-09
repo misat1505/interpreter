@@ -451,7 +451,7 @@ impl<'a> SemanticChecker<'a> {
             }
 
             let Some(enum_definition_node) = self.program.declared_types.get(&match_arm.value.enum_name.value) else {
-                unreachable!()
+                unreachable!();
             };
 
             let DeclaredType::Enum(EnumDeclaration {
@@ -472,11 +472,7 @@ impl<'a> SemanticChecker<'a> {
                 span: match_arm.value.enum_name.span,
             });
 
-            if visited_fields
-                .iter()
-                .find(|field| **field == match_arm.value.variant_name.value)
-                .is_some()
-            {
+            if visited_fields.iter().any(|field| *field == match_arm.value.variant_name.value) {
                 self.errors.push(Box::new(SemanticCheckerError::at(
                     ErrorSeverity::HIGH,
                     format!("Multiple arms for variant '{}'.", match_arm.value.variant_name.value),
@@ -509,11 +505,25 @@ impl<'a> SemanticChecker<'a> {
                 def_span: member_definition_node.span,
             });
 
-            let value_str = match match_arm.value.variant_value {
-                None => "".to_owned(),
-                Some(ref var_node) => {
-                    let resolved_type =
-                        self.resolve_type_fully_checked(&declared_field.as_ref().expect("This field should exists"), var_node.span)?;
+            let value_str = match (declared_field, match_arm.value.variant_value.as_ref()) {
+                (None, Some(val)) => {
+                    self.errors.push(Box::new(SemanticCheckerError::at(
+                        ErrorSeverity::HIGH,
+                        format!(
+                            "Enum '{}' variant '{}' doesn't contain any value.",
+                            declared_enum_ident, match_arm.value.variant_name.value
+                        ),
+                        val.span,
+                    )));
+
+                    visited_fields.push(match_arm.value.variant_name.value.clone());
+
+                    continue;
+                }
+
+                (Some(field), Some(var_node)) => {
+                    let resolved_type = self.resolve_type_fully_checked(field, var_node.span)?;
+
                     format!(
                         "{}{}{}{}",
                         TokenCategory::ParenOpen,
@@ -522,6 +532,7 @@ impl<'a> SemanticChecker<'a> {
                         TokenCategory::ParenClose
                     )
                 }
+                (_, None) => "".to_owned(),
             };
 
             self.hovers.push(HoverInfo {
@@ -538,31 +549,23 @@ impl<'a> SemanticChecker<'a> {
 
             visited_fields.push(match_arm.value.variant_name.value.clone());
 
-            match (declared_field, match_arm.value.variant_value.as_ref()) {
-                (None, Some(val)) => {
-                    self.errors.push(Box::new(SemanticCheckerError::at(
-                        ErrorSeverity::HIGH,
-                        format!(
-                            "Enum '{}' variant '{}' doesn't contain any value.",
-                            declared_enum_ident, match_arm.value.variant_name.value
-                        ),
-                        val.span,
-                    )));
-                    return Ok(());
-                }
-                (Some(t), Some(var_node)) => {
-                    let resolved_type = self.resolve_type_fully_checked(t, var_node.span)?;
+            if let (Some(field), Some(var_node)) = (declared_field, match_arm.value.variant_value.as_ref()) {
+                let resolved_type = self.resolve_type_fully_checked(field, var_node.span)?;
 
-                    self.stack.push_scope();
-                    self.stack
-                        .declare_variable(&var_node.value, resolved_type.clone(), var_node.span)
-                        .map_err(|e| -> Box<dyn IError> { Box::new(e) })?;
-                    self.identifier_hover(&resolved_type, var_node);
-                    self.visit_block(&match_arm.value.block)?;
-                    self.unused_variables_in_last_scope_warn();
-                    self.stack.pop_scope();
+                self.stack.push_scope();
+
+                if let Err(err) = self.stack.declare_variable(&var_node.value, resolved_type.clone(), var_node.span) {
+                    self.errors.push(Box::new(err));
                 }
-                (_, _) => self.visit_block(&match_arm.value.block)?,
+
+                self.identifier_hover(&resolved_type, var_node);
+
+                self.visit_block(&match_arm.value.block)?;
+
+                self.unused_variables_in_last_scope_warn();
+                self.stack.pop_scope();
+            } else {
+                self.visit_block(&match_arm.value.block)?;
             }
         }
 
@@ -582,13 +585,26 @@ impl<'a> SemanticChecker<'a> {
             }
 
             None => {
-                let missing_variant = declared_fields.keys().find(|variant| !visited_fields.contains(variant));
+                let missing_variants = declared_fields
+                    .keys()
+                    .filter(|variant| !visited_fields.contains(variant))
+                    .collect::<Vec<_>>();
 
-                if let Some(variant) = missing_variant {
+                if missing_variants.len() > 0 {
+                    let variants_concat = missing_variants
+                        .iter()
+                        .map(|variant| format!("'{}'", variant))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    let start_pos = match match_arms.last() {
+                        None => match_statement.span.start(),
+                        Some(arm) => arm.span.end(),
+                    };
                     self.errors.push(Box::new(SemanticCheckerError::at(
                         ErrorSeverity::HIGH,
-                        format!("Match is missing enum variant '{}'.", variant),
-                        match_statement.span,
+                        format!("Match is missing enum variants: {}.", variants_concat),
+                        Span::new(start_pos, match_statement.span.end()),
                     )));
                 }
             }
