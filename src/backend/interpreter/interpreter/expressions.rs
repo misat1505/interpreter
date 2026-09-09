@@ -54,9 +54,44 @@ impl<'a> Interpreter<'a> {
             Expression::Index { collection, index } => self.eval_index(collection, index)?,
             Expression::StructLiteral(node) => self.eval_struct_literal(&node.value.identifier, &node.value.fields, expression.span)?,
             Expression::FieldAccess { instance, field } => self.eval_field_access(instance, field)?,
-            Expression::EnumLiteral { .. } => todo!(),
+            Expression::EnumLiteral {
+                enum_name,
+                variant_name,
+                variant_value,
+            } => self.eval_enum_literal(enum_name, variant_name, variant_value)?,
         }
 
+        Ok(())
+    }
+
+    pub(in crate::backend::interpreter::interpreter) fn eval_enum_literal(
+        &mut self,
+        enum_name: &'a Node<String>,
+        variant_name: &'a Node<String>,
+        variant_value: &'a Option<Box<Node<Expression>>>,
+    ) -> Result<(), Box<dyn IError>> {
+        let value = match variant_value {
+            None => None,
+            Some(value) => {
+                self.visit_expression(value)?;
+                Some(Rc::new(RefCell::new(self.read_last_result()?)))
+            }
+        };
+
+        let Some(enum_type) = self.program.types.get(&enum_name.value) else {
+            return Err(Box::new(InterpreterError::at(
+                ErrorSeverity::HIGH,
+                String::from("Enum type not found"),
+                enum_name.span,
+            )));
+        };
+
+        let enum_literal = Value::Enum {
+            kind: Box::new(enum_type.clone()),
+            variant: variant_name.value.clone(),
+            value,
+        };
+        self.last_result = Some(enum_literal);
         Ok(())
     }
 

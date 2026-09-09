@@ -55,6 +55,19 @@ fn stringify_value(value: &Value) -> String {
                 format!("{} {{{}}}", identifier, fields_str)
             }
         }
+        Value::Enum { kind, variant, value } => {
+            let Type::Enum { identifier, .. } = kind.as_ref() else {
+                unreachable!("Value::Enum must have Type::Enum as its kind");
+            };
+            match value {
+                Some(value) => {
+                    format!("{}::{}({})", identifier, variant, stringify_value(&value.borrow()))
+                }
+                None => {
+                    format!("{}::{}", identifier, variant)
+                }
+            }
+        }
     }
 }
 

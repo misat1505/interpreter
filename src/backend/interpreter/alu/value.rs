@@ -39,6 +39,12 @@ pub enum Value {
         fields_types: Rc<HashMap<String, Type>>,
         fields: Rc<RefCell<HashMap<String, Rc<RefCell<Value>>>>>,
     },
+
+    Enum {
+        kind: Box<Type>,
+        variant: String,
+        value: Option<Rc<RefCell<Value>>>,
+    },
 }
 
 impl Display for Value {
@@ -48,28 +54,38 @@ impl Display for Value {
             Value::I16(value) => write!(f, "{value}"),
             Value::I32(value) => write!(f, "{value}"),
             Value::I64(value) => write!(f, "{value}"),
+
             Value::U8(value) => write!(f, "{value}"),
             Value::U16(value) => write!(f, "{value}"),
             Value::U32(value) => write!(f, "{value}"),
             Value::U64(value) => write!(f, "{value}"),
+
             Value::F64(value) => write!(f, "{value}"),
             Value::String(value) => write!(f, "{value}"),
             Value::Char(value) => write!(f, "{value}"),
             Value::Bool(value) => write!(f, "{value}"),
+
             Value::Vector { values, .. } => {
                 let values = values.borrow();
+
                 write!(f, "[")?;
+
                 for (index, value) in values.iter().enumerate() {
                     if index > 0 {
                         write!(f, ", ")?;
                     }
+
                     write!(f, "{}", value.borrow())?;
                 }
+
                 write!(f, "]")
             }
+
             Value::Struct { identifier, fields, .. } => {
                 let fields = fields.borrow();
+
                 write!(f, "{identifier} {{")?;
+
                 let mut entries: Vec<_> = fields.iter().collect();
                 entries.sort_by_key(|(name, _)| *name);
 
@@ -77,9 +93,25 @@ impl Display for Value {
                     if index > 0 {
                         write!(f, ", ")?;
                     }
+
                     write!(f, "{name}: {}", value.borrow())?;
                 }
+
                 write!(f, "}}")
+            }
+
+            Value::Enum { kind, variant, value } => {
+                let Type::Enum { identifier, .. } = kind.as_ref() else {
+                    unreachable!("Value::Enum must have Type::Enum as its kind");
+                };
+
+                write!(f, "{identifier}::{variant}")?;
+
+                if let Some(value) = value {
+                    write!(f, "({})", value.borrow())?;
+                }
+
+                Ok(())
             }
         }
     }
@@ -102,6 +134,7 @@ impl Value {
 
             Type::F64 => Ok(Value::F64(0.0)),
             Type::Str => Ok(Value::String("".to_owned())),
+            Type::Char => Ok(Value::Char('\0')),
 
             Type::Vector(inner) => Ok(Value::Vector {
                 kind: Box::new(Type::Vector(inner.clone())),
@@ -113,6 +146,7 @@ impl Value {
 
                 for (field_name, field_type) in fields {
                     let default_field_value = Value::default_value(field_type, span)?;
+
                     default_fields.insert(field_name.clone(), Rc::new(RefCell::new(default_field_value)));
                 }
 
@@ -120,6 +154,28 @@ impl Value {
                     identifier: identifier.clone(),
                     fields_types: Rc::new(fields.clone()),
                     fields: Rc::new(RefCell::new(default_fields)),
+                })
+            }
+
+            Type::Enum { identifier, fields } => {
+                let Some((variant, variant_type)) = fields.iter().next() else {
+                    return Err(ComputationError::new(
+                        ErrorSeverity::HIGH,
+                        format!("Cannot create default value for empty enum '{}'.", identifier),
+                        span,
+                    ));
+                };
+
+                let value = match variant_type {
+                    Some(field_type) => Some(Rc::new(RefCell::new(Value::default_value(field_type, span)?))),
+
+                    None => None,
+                };
+
+                Ok(Value::Enum {
+                    kind: Box::new(var_type.clone()),
+                    variant: variant.clone(),
+                    value,
                 })
             }
 
@@ -157,6 +213,8 @@ impl Value {
                 identifier: identifier.clone(),
                 fields: (**fields_types).clone(),
             },
+
+            Value::Enum { kind, .. } => kind.as_ref().clone(),
         }
     }
 

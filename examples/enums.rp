@@ -22,19 +22,19 @@ let repo = TaskRepository {
     ]
 };
 
-for (let i = 0; i < vector_size(&repo.tasks); i += 1) {
-    let task = repo.tasks[i];
+# for (let i = 0; i < vector_size(&repo.tasks); i += 1) {
+#     let task = repo.tasks[i];
 
-    match (task) {
-        Task::InProgress(deadline) {
-            #  deadline: Deadline - available only in this scope
-        },
-        Task::Aborted {
-            # Aborted doesn't contain any data
-        },
-        rest {
-            # have to match all the arms
-            # use else to catch the rest
-        }
-    }
-}
+#     match (task) {
+#         Task::InProgress(deadline) {
+#             #  deadline: Deadline - available only in this scope
+#         },
+#         Task::Aborted {
+#             # Aborted doesn't contain any data
+#         },
+#         rest {
+#             # have to match all the arms
+#             # use else to catch the rest
+#         }
+#     }
+# }
