@@ -10,7 +10,7 @@ use crate::{
         tokens::TokenCategory,
     },
     semantic::semantic_checker::{
-        checker::{DefinitionInfo, HoverInfo},
+        checker::{type_prefix, DefinitionInfo, HoverInfo},
         SemanticChecker,
     },
 };
@@ -64,10 +64,7 @@ impl<'a> SemanticChecker<'a> {
                             .push(Box::new(SemanticCheckerError::at(ErrorSeverity::HIGH, err.message(), statement.span)));
                     }
                 }
-                self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{} {}\n```", resolved_type.unwrap_or(Type::Void), identifier.value),
-                    span: identifier.span,
-                });
+                self.identifier_hover(&resolved_type.unwrap_or(Type::Void), identifier);
             }
             VariableDeclarationKind::LET { var_type, value } => {
                 let _ = self.visit_expression(value);
@@ -144,10 +141,7 @@ impl<'a> SemanticChecker<'a> {
                         None => Type::Void,
                     },
                 };
-                self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{} {}\n```", final_type, identifier.value),
-                    span: identifier.span,
-                });
+                self.identifier_hover(&final_type, identifier);
             }
         }
         Ok(())
@@ -177,10 +171,7 @@ impl<'a> SemanticChecker<'a> {
                 self.errors
                     .push(Box::new(SemanticCheckerError::at(ErrorSeverity::HIGH, err.message(), statement.span)));
             }
-            self.hovers.push(HoverInfo {
-                contents: format!("```raptor\n{} {}\n```", value, identifier.value),
-                span: identifier.span,
-            });
+            self.identifier_hover(&value, identifier);
 
             if let Ok(def_span) = self.stack.get_variable_declaration_span(identifier.value.as_str(), statement.span) {
                 self.definitions.push(DefinitionInfo {
@@ -523,13 +514,20 @@ impl<'a> SemanticChecker<'a> {
                 Some(ref var_node) => {
                     let resolved_type =
                         self.resolve_type_fully_checked(&declared_field.as_ref().expect("This field should exists"), var_node.span)?;
-                    format!("{}{}{}", TokenCategory::ParenOpen, resolved_type, TokenCategory::ParenClose)
+                    format!(
+                        "{}{}{}{}",
+                        TokenCategory::ParenOpen,
+                        type_prefix(&resolved_type),
+                        resolved_type,
+                        TokenCategory::ParenClose
+                    )
                 }
             };
 
             self.hovers.push(HoverInfo {
                 contents: format!(
-                    "```raptor\n{}{}{}{}\n```",
+                    "```raptor\n{} {}{}{}{}\n```",
+                    TokenCategory::Enum,
                     match_arm.value.enum_name.value,
                     TokenCategory::DoubleColon,
                     match_arm.value.variant_name.value,
@@ -559,10 +557,7 @@ impl<'a> SemanticChecker<'a> {
                     self.stack
                         .declare_variable(&var_node.value, resolved_type.clone(), var_node.span)
                         .map_err(|e| -> Box<dyn IError> { Box::new(e) })?;
-                    self.hovers.push(HoverInfo {
-                        contents: format!("```raptor\n{} {}\n```", resolved_type, var_node.value),
-                        span: var_node.span,
-                    });
+                    self.identifier_hover(&resolved_type, var_node);
                     self.visit_block(&match_arm.value.block)?;
                     self.unused_variables_in_last_scope_warn();
                     self.stack.pop_scope();

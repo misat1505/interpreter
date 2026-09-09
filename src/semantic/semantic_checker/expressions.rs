@@ -11,7 +11,7 @@ use crate::{
     },
     semantic::{
         semantic_checker::{
-            checker::{DefinitionInfo, HoverInfo},
+            checker::{type_prefix, DefinitionInfo, HoverInfo},
             functions::FunctionCallType,
             SemanticChecker,
         },
@@ -36,10 +36,7 @@ impl<'a> SemanticChecker<'a> {
             }
         };
 
-        self.hovers.push(HoverInfo {
-            contents: format!("```raptor\n{} {}\n```", current_type, identifier.value),
-            span: identifier.span,
-        });
+        self.identifier_hover(&current_type, identifier);
 
         if let Ok(def_span) = self.stack.get_variable_declaration_span(identifier.value.as_str(), identifier.span) {
             self.definitions.push(DefinitionInfo {
@@ -113,10 +110,7 @@ impl<'a> SemanticChecker<'a> {
                         Err(_) => return,
                     };
 
-                    self.hovers.push(HoverInfo {
-                        contents: format!("```raptor\n{} {}\n```", current_type, field.value),
-                        span: field.span,
-                    });
+                    self.identifier_hover(&current_type, field);
 
                     let Some(type_declaration) = self.program.declared_types.get(&struct_name) else {
                         self.errors.push(Box::new(SemanticCheckerError::at(
@@ -290,10 +284,7 @@ impl<'a> SemanticChecker<'a> {
                     self.last_result = None;
                     return Ok(());
                 };
-                self.hovers.push(HoverInfo {
-                    contents: format!("```raptor\n{} {}\n```", field_type, field.value),
-                    span: field.span,
-                });
+                self.identifier_hover(&field_type, field);
                 self.last_result = Some(field_type);
 
                 let Some(type_declaration) = self.program.declared_types.get(identifier) else {
@@ -393,13 +384,20 @@ impl<'a> SemanticChecker<'a> {
                         self.visit_expression(var_node)?;
                         let actual_type = self.read_last_result(var_node.span)?;
                         let resolved_type = self.resolve_type_fully_checked(&actual_type, var_node.span)?;
-                        format!("{}{}{}", TokenCategory::ParenOpen, resolved_type, TokenCategory::ParenClose)
+                        format!(
+                            "{}{}{}{}",
+                            TokenCategory::ParenOpen,
+                            type_prefix(&resolved_type),
+                            resolved_type,
+                            TokenCategory::ParenClose
+                        )
                     }
                 };
 
                 self.hovers.push(HoverInfo {
                     contents: format!(
-                        "```raptor\n{}{}{}{}\n```",
+                        "```raptor\n{} {}{}{}{}\n```",
+                        TokenCategory::Enum,
                         enum_name.value,
                         TokenCategory::DoubleColon,
                         variant_name.value,
