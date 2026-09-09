@@ -1,10 +1,11 @@
 use crate::{
     common::{
         errors::{ErrorSeverity, IError, SemanticCheckerError},
+        span::Span,
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Node, Statement, SwitchCase, SwitchExpression, VariableDeclarationKind},
+    frontend::ast::{DeclaredType, EnumDeclaration, Node, Statement, SwitchCase, SwitchExpression, VariableDeclarationKind},
     semantic::semantic_checker::{
         checker::{DefinitionInfo, HoverInfo},
         SemanticChecker,
@@ -455,6 +456,23 @@ impl<'a> SemanticChecker<'a> {
                 continue;
             }
 
+            let Some(enum_definition_node) = self.program.declared_types.get(&match_arm.value.enum_name.value) else {
+                unreachable!()
+            };
+
+            let DeclaredType::Enum(EnumDeclaration {
+                members: ref enum_members_location,
+                ..
+            }) = enum_definition_node.value
+            else {
+                unreachable!();
+            };
+
+            self.definitions.push(DefinitionInfo {
+                use_span: match_arm.value.enum_name.span,
+                def_span: enum_definition_node.span,
+            });
+
             if visited_fields
                 .iter()
                 .find(|field| **field == match_arm.value.variant_name.value)
@@ -474,7 +492,7 @@ impl<'a> SemanticChecker<'a> {
                         "Enum '{}' doesn't have variant '{}'.",
                         declared_enum_ident, match_arm.value.variant_name.value
                     ),
-                    expression.span,
+                    Span::new(match_arm.value.enum_name.span.start(), match_arm.value.variant_name.span.end()),
                 )));
 
                 visited_fields.push(match_arm.value.variant_name.value.clone());
@@ -482,17 +500,27 @@ impl<'a> SemanticChecker<'a> {
                 continue;
             };
 
+            let member_definition_node = enum_members_location
+                .iter()
+                .find(|node| node.value.identifier.value == match_arm.value.variant_name.value)
+                .expect("Variant not found should be already handled");
+
+            self.definitions.push(DefinitionInfo {
+                use_span: match_arm.value.variant_name.span,
+                def_span: member_definition_node.span,
+            });
+
             visited_fields.push(match_arm.value.variant_name.value.clone());
 
             match (declared_field, match_arm.value.variant_value.as_ref()) {
-                (None, Some(_)) => {
+                (None, Some(val)) => {
                     self.errors.push(Box::new(SemanticCheckerError::at(
                         ErrorSeverity::HIGH,
                         format!(
                             "Enum '{}' variant '{}' doesn't contain any value.",
                             declared_enum_ident, match_arm.value.variant_name.value
                         ),
-                        match_arm.value.variant_name.span,
+                        val.span,
                     )));
                     return Ok(());
                 }

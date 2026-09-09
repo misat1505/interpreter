@@ -5,7 +5,7 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Accessor, DeclaredType, Expression, Node},
+    frontend::ast::{Accessor, DeclaredType, EnumDeclaration, Expression, Node},
     semantic::{
         semantic_checker::{
             checker::{DefinitionInfo, HoverInfo},
@@ -343,14 +343,41 @@ impl<'a> SemanticChecker<'a> {
                     return Ok(());
                 };
 
+                let Some(enum_definition_node) = self.program.declared_types.get(&enum_name.value) else {
+                    unreachable!()
+                };
+
+                let DeclaredType::Enum(EnumDeclaration {
+                    members: ref enum_members_location,
+                    ..
+                }) = enum_definition_node.value
+                else {
+                    unreachable!();
+                };
+
+                self.definitions.push(DefinitionInfo {
+                    use_span: enum_name.span,
+                    def_span: enum_definition_node.span,
+                });
+
                 let Some(expected_type) = declared_variants.get(&variant_name.value) else {
                     self.errors.push(Box::new(SemanticCheckerError::at(
                         ErrorSeverity::HIGH,
                         format!("Enum '{}' doesn't have field '{}'.", enum_name.value, variant_name.value),
-                        enum_name.span,
+                        Span::new(enum_name.span.start(), variant_name.span.end()),
                     )));
                     return Ok(());
                 };
+
+                let member_definition_node = enum_members_location
+                    .iter()
+                    .find(|node| node.value.identifier.value == variant_name.value)
+                    .expect("Variant not found should be already handled");
+
+                self.definitions.push(DefinitionInfo {
+                    use_span: variant_name.span,
+                    def_span: member_definition_node.span,
+                });
 
                 match (expected_type, variant_value) {
                     (Some(t), Some(var_node)) => {
@@ -365,7 +392,7 @@ impl<'a> SemanticChecker<'a> {
                                     "Enum '{}' variant '{}' expects value of type '{}', found '{}'.",
                                     enum_name.value, variant_name.value, resolved_expected_type, resolved_type
                                 ),
-                                enum_name.span,
+                                var_node.span,
                             )));
                             return Ok(());
                         }
@@ -382,7 +409,7 @@ impl<'a> SemanticChecker<'a> {
                                 "Enum '{}' variant '{}' expected value of type '{}'.",
                                 enum_name.value, variant_name.value, resolved_expected_type
                             ),
-                            enum_name.span,
+                            Span::new(enum_name.span.start(), variant_name.span.end()),
                         )));
                         return Ok(());
                     }
