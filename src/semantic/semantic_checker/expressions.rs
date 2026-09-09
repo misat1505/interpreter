@@ -5,7 +5,10 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{Accessor, DeclaredType, EnumDeclaration, Expression, Node},
+    frontend::{
+        ast::{Accessor, DeclaredType, EnumDeclaration, Expression, Node},
+        tokens::TokenCategory,
+    },
     semantic::{
         semantic_checker::{
             checker::{DefinitionInfo, HoverInfo},
@@ -360,6 +363,11 @@ impl<'a> SemanticChecker<'a> {
                     def_span: enum_definition_node.span,
                 });
 
+                self.hovers.push(HoverInfo {
+                    contents: format!("```raptor\nenum {}\n```", enum_name.value),
+                    span: enum_name.span,
+                });
+
                 let Some(expected_type) = declared_variants.get(&variant_name.value) else {
                     self.errors.push(Box::new(SemanticCheckerError::at(
                         ErrorSeverity::HIGH,
@@ -377,6 +385,27 @@ impl<'a> SemanticChecker<'a> {
                 self.definitions.push(DefinitionInfo {
                     use_span: variant_name.span,
                     def_span: member_definition_node.span,
+                });
+
+                let value_str = match variant_value {
+                    None => "".to_owned(),
+                    Some(var_node) => {
+                        self.visit_expression(var_node)?;
+                        let actual_type = self.read_last_result(var_node.span)?;
+                        let resolved_type = self.resolve_type_fully_checked(&actual_type, var_node.span)?;
+                        format!("{}{}{}", TokenCategory::ParenOpen, resolved_type, TokenCategory::ParenClose)
+                    }
+                };
+
+                self.hovers.push(HoverInfo {
+                    contents: format!(
+                        "```raptor\n{}{}{}{}\n```",
+                        enum_name.value,
+                        TokenCategory::DoubleColon,
+                        variant_name.value,
+                        value_str
+                    ),
+                    span: variant_name.span,
                 });
 
                 match (expected_type, variant_value) {

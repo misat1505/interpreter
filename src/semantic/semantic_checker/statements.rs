@@ -5,7 +5,10 @@ use crate::{
         types::Type,
         visitor::Visitor,
     },
-    frontend::ast::{DeclaredType, EnumDeclaration, Node, Statement, SwitchCase, SwitchExpression, VariableDeclarationKind},
+    frontend::{
+        ast::{DeclaredType, EnumDeclaration, Node, Statement, SwitchCase, SwitchExpression, VariableDeclarationKind},
+        tokens::TokenCategory,
+    },
     semantic::semantic_checker::{
         checker::{DefinitionInfo, HoverInfo},
         SemanticChecker,
@@ -473,6 +476,11 @@ impl<'a> SemanticChecker<'a> {
                 def_span: enum_definition_node.span,
             });
 
+            self.hovers.push(HoverInfo {
+                contents: format!("```raptor\nenum {}\n```", match_arm.value.enum_name.value),
+                span: match_arm.value.enum_name.span,
+            });
+
             if visited_fields
                 .iter()
                 .find(|field| **field == match_arm.value.variant_name.value)
@@ -508,6 +516,26 @@ impl<'a> SemanticChecker<'a> {
             self.definitions.push(DefinitionInfo {
                 use_span: match_arm.value.variant_name.span,
                 def_span: member_definition_node.span,
+            });
+
+            let value_str = match match_arm.value.variant_value {
+                None => "".to_owned(),
+                Some(ref var_node) => {
+                    let resolved_type =
+                        self.resolve_type_fully_checked(&declared_field.as_ref().expect("This field should exists"), var_node.span)?;
+                    format!("{}{}{}", TokenCategory::ParenOpen, resolved_type, TokenCategory::ParenClose)
+                }
+            };
+
+            self.hovers.push(HoverInfo {
+                contents: format!(
+                    "```raptor\n{}{}{}{}\n```",
+                    match_arm.value.enum_name.value,
+                    TokenCategory::DoubleColon,
+                    match_arm.value.variant_name.value,
+                    value_str
+                ),
+                span: match_arm.value.variant_name.span,
             });
 
             visited_fields.push(match_arm.value.variant_name.value.clone());
