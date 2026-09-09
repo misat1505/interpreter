@@ -1,8 +1,12 @@
-# This is a concept file. It typechecks for now, but is not executable in any mode.
+# This is a concept file. It typechecks for now and runs in interpreter mode, but is not compilable.
 
 struct Deadline {
     str date
 };
+
+fn deadline_repr(&Deadline deadline): str {
+    return "Deadline { date: \"" + deadline.date + "\" }";
+}
 
 enum Task {
     InProgress(Deadline),
@@ -10,9 +14,33 @@ enum Task {
     Aborted
 };
 
+fn task_repr(&Task task): str {
+    match (task) {
+        Task::InProgress(deadline) {
+            return "Task::InProgress(" + deadline_repr(&deadline) + ")";
+        },
+        Task::Completed(msg) {
+            return "Task::Completed(\"" + msg + "\")";
+        },
+        Task::Aborted {
+            return "Task::Aborted";
+        }
+    }
+}
+
 struct TaskRepository {
     Task[] tasks
 };
+
+fn task_repository_repr(&TaskRepository repo): str {
+    let text = "TaskRepository { tasks: [";
+    for (let i = 0; i < vector_size(&repo.tasks); i += 1) {
+        if (i != 0) text += ", ";
+        text += task_repr(&repo.tasks[i]);
+    }
+    text += "] }";
+    return text;
+}
 
 let repo = TaskRepository {
     tasks: [
@@ -22,19 +50,4 @@ let repo = TaskRepository {
     ]
 };
 
-# for (let i = 0; i < vector_size(&repo.tasks); i += 1) {
-#     let task = repo.tasks[i];
-
-#     match (task) {
-#         Task::InProgress(deadline) {
-#             #  deadline: Deadline - available only in this scope
-#         },
-#         Task::Aborted {
-#             # Aborted doesn't contain any data
-#         },
-#         rest {
-#             # have to match all the arms
-#             # use else to catch the rest
-#         }
-#     }
-# }
+println(task_repository_repr(&repo));

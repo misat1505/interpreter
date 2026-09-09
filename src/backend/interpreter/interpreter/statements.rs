@@ -394,7 +394,7 @@ impl<'a> Interpreter<'a> {
             Statement::Continue => {
                 self.abort_state = Some(AbortState::Continue);
             }
-            Statement::Match { .. } => todo!(),
+            Statement::Match { .. } => self.exec_match_statement(statement)?,
         }
 
         Ok(())
@@ -739,5 +739,93 @@ impl<'a> Interpreter<'a> {
                 expression.span,
             ))),
         }
+    }
+
+    pub(in crate::backend::interpreter::interpreter) fn exec_match_statement(
+        &mut self,
+        match_statement: &'a Node<Statement>,
+    ) -> Result<(), Box<dyn IError>> {
+        let Statement::Match {
+            expression,
+            match_arms,
+            rest_arm,
+        } = &match_statement.value
+        else {
+            unreachable!("exec_match_statement called for non-match statement");
+        };
+
+        // Obliczamy wartość, po której będziemy matchować.
+        self.visit_expression(expression)?;
+
+        let computed_value = self.read_last_result()?;
+
+        let Value::Enum { kind, variant, value } = computed_value else {
+            return Err(Box::new(InterpreterError::expected_found(
+                ErrorSeverity::HIGH,
+                String::from("Cannot match this value."),
+                String::from("Enum"),
+                format!("{}", computed_value.to_type()),
+                expression.span,
+            )));
+        };
+
+        let Type::Enum {
+            identifier: enum_identifier, ..
+        } = kind.as_ref()
+        else {
+            unreachable!("Value::Enum must have Type::Enum as its kind");
+        };
+
+        let mut matched = false;
+
+        for match_arm in match_arms {
+            if match_arm.value.enum_name.value != *enum_identifier {
+                continue;
+            }
+
+            if match_arm.value.variant_name.value != variant {
+                continue;
+            }
+
+            matched = true;
+
+            if let Some(binding) = &match_arm.value.variant_value {
+                let Some(value) = value else {
+                    return Err(Box::new(InterpreterError::at(
+                        ErrorSeverity::HIGH,
+                        format!("Enum variant '{}::{}' does not contain a value.", enum_identifier, variant,),
+                        binding.span,
+                    )));
+                };
+
+                self.stack.push_scope();
+
+                let declare_result = self.stack.declare_variable(binding.value.as_str(), Rc::clone(&value), binding.span);
+
+                if let Err(err) = declare_result {
+                    self.stack.pop_scope();
+
+                    return Err(Box::new(InterpreterError::at(ErrorSeverity::HIGH, err.message(), binding.span)));
+                }
+
+                let result = self.visit_block(&match_arm.value.block);
+
+                self.stack.pop_scope();
+
+                result?;
+            } else {
+                self.visit_block(&match_arm.value.block)?;
+            }
+
+            break;
+        }
+
+        if !matched {
+            if let Some(rest_block) = rest_arm {
+                self.visit_block(rest_block)?;
+            }
+        }
+
+        Ok(())
     }
 }
