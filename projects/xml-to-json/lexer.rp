@@ -82,7 +82,7 @@ fn lexer_try_generating_number(&Lexer lexer): OptionToken {
     let number = 0;
 
     while (true) {
-        match (source_consume_char(&lexer.source)) {
+        match (source_get_current_char(&lexer.source)) {
             OptionChar::None break;,
             OptionChar::Some(ch) {
                 if (!char_is_digit(ch)) break;
@@ -92,6 +92,8 @@ fn lexer_try_generating_number(&Lexer lexer): OptionToken {
                 } else {
                     number = number * 10 + char_to_digit(ch);
                 }
+
+                source_consume_char(&lexer.source);
             }
         }
     }
