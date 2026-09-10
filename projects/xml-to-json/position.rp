@@ -1,0 +1,19 @@
+struct Position {
+    i64 offset,
+    i64 line,
+    i64 column
+};
+
+fn position_repr(&Position position): str {
+    let text = "Position { offset: " + position.offset as str + ", line: " + position.line as str + ", column: " + position.column as str + " }";
+
+    return text;
+}
+
+fn position_clone(&Position position): Position {
+    return Position {
+        offset: position.offset,
+        line: position.line,
+        column: position.column
+    };
+}

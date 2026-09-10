@@ -1,0 +1,67 @@
+import "./position.rp";
+
+
+enum TokenKind {
+    Less,
+    Greater,
+    Slash,
+    Literal,
+    ETX
+};
+
+fn token_kind_repr(&TokenKind kind): str {
+    let prefix = "TokenKind::";
+
+    match (kind) {
+        TokenKind::Less return prefix + "Less";,
+        TokenKind::Greater return prefix + "Greater";,
+        TokenKind::Slash return prefix + "Slash";,
+        TokenKind::ETX return prefix + "ETX";,
+        TokenKind::Literal return prefix + "Literal";
+    }
+}
+
+enum TokenValue {
+    Str(str),
+    Number(i64)
+};
+
+fn token_value_repr(&TokenValue value): str {
+    let prefix = "TokenValue::";
+
+    match (value) {
+        TokenValue::Str(text) return prefix + "Str(\"" + text + "\")";, 
+        TokenValue::Number(number) return prefix + "Number(" + number as str + ")";
+    }
+}
+
+enum OptionTokenValue {
+    Some(TokenValue),
+    None
+};
+
+fn option_token_value_repr(&OptionTokenValue value): str {
+    let prefix = "OptionTokenValue::";
+
+    match (value) {
+        OptionTokenValue::None return prefix + "None";, 
+        OptionTokenValue::Some(val) return prefix + "Some(" + token_value_repr(&val) + ")";
+    }
+}
+
+struct Token {
+    TokenKind kind,
+    OptionTokenValue value,
+    Position position
+};
+
+fn token_repr(&Token token): str {
+    let text = "Token { kind: " + token_kind_repr(&token.kind) + ", value: " + option_token_value_repr(&token.value) + ", position: " + position_repr(&token.position) + " }";
+
+    return text;
+}
+
+enum OptionToken {
+    Some(Token),
+    None
+};

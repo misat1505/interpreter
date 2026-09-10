@@ -1,0 +1,30 @@
+<company>
+  <departments>
+    <0>
+      <budget>
+        2000000
+      </budget>
+      <head>
+        Dr. Alan Turing
+      </head>
+      <name>
+        Engineering
+      </name>
+      </teams>
+    </0>
+    <1>
+      <budget>
+        1000000
+      </budget>
+      <head>
+        Jane Doe
+      </head>
+      <name>
+        Sales
+      </name>
+    </1>
+  </departments>
+  <founded>
+    1998
+  </founded>
+</company>

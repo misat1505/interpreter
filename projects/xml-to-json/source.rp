@@ -1,0 +1,37 @@
+import "./position.rp";
+
+enum OptionChar {
+    Some(char),
+    None
+};
+
+struct Source {
+    str source,
+    Position position
+};
+
+fn source_new(str source): Source {
+    let position = Position { line: 1, column: 1, offset: 0 };
+    return Source { source, position };
+}
+
+fn source_get_current_char(&Source source): OptionChar {
+    let idx = source.position.offset;
+    if (str_len(source.source) <= idx) return OptionChar::None;
+    return OptionChar::Some(source.source[idx]);
+}
+
+fn source_consume_char(&Source source): OptionChar {
+    let idx = source.position.offset;
+    if (str_len(source.source) <= idx) return OptionChar::None;
+
+    let ch = source.source[idx];
+    source.position.offset += 1;
+    if (ch == '\n') {
+        source.position.line += 1;
+        source.position.column = 1;
+    } else {
+        source.position.column += 1;
+    }
+    return OptionChar::Some(ch);
+}

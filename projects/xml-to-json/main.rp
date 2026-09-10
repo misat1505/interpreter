@@ -1,0 +1,23 @@
+import "./lexer.rp";
+
+
+fn main(): void {
+    let source = read_file("./projects/xml-to-json/data/data1.xml");
+    let lexer = lexer_new(source);
+
+    let tokens: Token[] = [];
+    while (true) {
+        let token = lexer_next_token(&lexer);
+
+        match (token.kind) {
+            TokenKind::ETX break;,
+            rest vector_push(&tokens, token);
+        }
+    }
+
+    for (let i = 0; i < vector_size(&tokens); i += 1) {
+        println(token_repr(&tokens[i]));
+    }
+}
+
+main();
