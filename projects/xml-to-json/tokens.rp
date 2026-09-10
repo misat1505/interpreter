@@ -6,7 +6,8 @@ enum TokenKind {
     Greater,
     Slash,
     Literal,
-    ETX
+    ETX,
+    STX
 };
 
 fn token_kind_repr(&TokenKind kind): str {
@@ -17,6 +18,7 @@ fn token_kind_repr(&TokenKind kind): str {
         TokenKind::Greater return prefix + "Greater";,
         TokenKind::Slash return prefix + "Slash";,
         TokenKind::ETX return prefix + "ETX";,
+        TokenKind::STX return prefix + "STX";,
         TokenKind::Literal return prefix + "Literal";
     }
 }

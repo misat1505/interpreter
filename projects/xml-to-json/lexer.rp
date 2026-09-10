@@ -4,12 +4,18 @@ import "../../stdlib/string.rp";
 
 struct Lexer {
     Source source,
-    i64 offset
+    i64 offset,
+    Token current_token
 };
 
 fn lexer_new(str source): Lexer {
     let src = source_new(source);
-    return Lexer { offset: 0, source: src };
+    let init_token = Token {
+        kind: TokenKind::STX,
+        value: OptionTokenValue::None,
+        position: position_clone(&src.position)
+    };
+    return Lexer { offset: 0, source: src, current_token: init_token };
 }
 
 fn lexer_advance_whitespace(&Lexer lexer): void {
@@ -32,24 +38,35 @@ fn lexer_next_token(&Lexer lexer): Token {
 
     match (lexer_try_generating_sign(&lexer)) {
         OptionToken::None {},
-        OptionToken::Some(token) return token;
+        OptionToken::Some(token) {
+            lexer.current_token = token;
+            return token;
+        }
     }
 
     match (lexer_try_generating_string(&lexer)) {
         OptionToken::None {},
-        OptionToken::Some(token) return token;
+        OptionToken::Some(token) {
+            lexer.current_token = token;
+            return token;
+        }
     }
 
     match (lexer_try_generating_number(&lexer)) {
         OptionToken::None {},
-        OptionToken::Some(token) return token;
+        OptionToken::Some(token) {
+            lexer.current_token = token;
+            return token;
+        }
     }
 
-    return Token {
+    let etx_token = Token {
         kind: TokenKind::ETX,
         value: OptionTokenValue::None,
         position: lexer.source.position
     };
+    lexer.current_token = etx_token;
+    return etx_token;
 }
 
 fn lexer_try_generating_number(&Lexer lexer): OptionToken {
@@ -97,12 +114,11 @@ fn lexer_try_generating_string(&Lexer lexer): OptionToken {
     }
 
     let start_position = position_clone(&lexer.source.position);
-
     let chars = ['<', '>', '/'];
     let text = "";
 
     while (true) {
-        match (source_consume_char(&lexer.source)) {
+        match (source_get_current_char(&lexer.source)) {
             OptionChar::None break;,
             OptionChar::Some(ch) {
                 let break_at_the_end = false;
@@ -110,6 +126,8 @@ fn lexer_try_generating_string(&Lexer lexer): OptionToken {
                     if (ch == chars[i]) break_at_the_end = true;
                 }
                 if (break_at_the_end) break;
+
+                source_consume_char(&lexer.source);
                 text += ch;
             }
         }

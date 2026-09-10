@@ -1,0 +1,201 @@
+import "./lexer.rp";
+import "./ast.rp";
+
+struct Parser {
+    Lexer lexer
+};
+
+fn parser_new(&Lexer lexer): Parser {
+    lexer_next_token(&lexer);
+    return Parser { lexer };
+}
+
+fn parser_parse(&Parser parser): Node {
+    match (parser_parse_literal(&parser)) {
+        OptionNode::Some(node) return node;,
+        OptionNode::None {}
+    }
+
+    match (parser_parse_composite(&parser)) {
+        OptionNode::Some(node) return node;,
+        OptionNode::None {}
+    }
+
+    # fallback
+    return Node {
+        kind: NodeKind::Literal(NodeLiteral::Number(0)),
+        position: position_clone(&parser.lexer.source.position)
+    };
+}
+
+fn parser_parse_literal(&Parser parser): OptionNode {
+    match (parser.lexer.current_token.kind) {
+        TokenKind::Literal {},
+        rest return OptionNode::None;
+    }
+
+    let position = position_clone(&parser.lexer.current_token.position);
+    let node_literal = NodeLiteral::Number(0);
+
+    match (parser.lexer.current_token.value) {
+        OptionTokenValue::None return OptionNode::None;,
+        OptionTokenValue::Some(value) {
+            match (value) {
+                TokenValue::Number(num) node_literal = NodeLiteral::Number(num);,
+                TokenValue::Str(text)   node_literal = NodeLiteral::Str(text);
+            }
+        }
+    }
+
+    lexer_next_token(&parser.lexer);
+
+    return OptionNode::Some(Node {
+        kind: NodeKind::Literal(node_literal),
+        position
+    });
+}
+
+fn parser_parse_composite(&Parser parser): OptionNode {
+    match (parser.lexer.current_token.kind) {
+        TokenKind::Less {},
+        rest return OptionNode::None;
+    }
+
+    let position = position_clone(&parser.lexer.current_token.position);
+    lexer_next_token(&parser.lexer);               # 
+
+    return parser_parse_composite_after_less(&parser, &position);
+}
+
+fn parser_parse_composite_after_less(&Parser parser, &Position position): OptionNode {
+    match (parser.lexer.current_token.kind) {
+        TokenKind::Literal {},
+        rest return OptionNode::None;
+    }
+
+    let is_array = false;
+    let tag_name = "";
+
+    match (parser.lexer.current_token.value) {
+        OptionTokenValue::None return OptionNode::None;,
+        OptionTokenValue::Some(value) {
+            match (value) {
+                TokenValue::Number {
+                    is_array = true;
+                },
+                TokenValue::Str(text) {
+                    tag_name = text;
+                }
+            }
+        }
+    }
+
+    lexer_next_token(&parser.lexer);               # nazwa
+
+    match (parser.lexer.current_token.kind) {
+        TokenKind::Greater {},
+        rest return OptionNode::None;
+    }
+    lexer_next_token(&parser.lexer);               # >
+
+    if (is_array) return parser_finish_array(&parser, &position);
+
+    return parser_finish_key_value(&parser, &position, tag_name);
+}
+
+fn parser_finish_array(&Parser parser, &Position position): OptionNode {
+    let nodes: Node[] = [];
+
+    while (true) {
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Less {},
+            rest break;
+        }
+
+        let child_position = position_clone(&parser.lexer.current_token.position);
+        lexer_next_token(&parser.lexer);           # zjadamy 
+
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Slash {
+                lexer_next_token(&parser.lexer);   # /
+                lexer_next_token(&parser.lexer);   # liczba
+                lexer_next_token(&parser.lexer);   # >
+                break;
+            },
+            rest {}
+        }
+
+        # to jest tag dziecka - dokańczamy parsowanie od miejsca "po <"
+        match (parser_parse_composite_after_less(&parser, &child_position)) {
+            OptionNode::Some(node) vector_push(&nodes, node);,
+            OptionNode::None break;
+        }
+    }
+
+    return OptionNode::Some(Node {
+        kind: NodeKind::Array(nodes),
+        position: position_clone(&position)
+    });
+}
+
+fn parser_finish_key_value(&Parser parser, &Position position, str first_key): OptionNode {
+    let keys: str[] = [];
+    let nodes: Node[] = [];
+
+    vector_push(&keys, first_key);
+    vector_push(&nodes, parser_parse(&parser));
+
+    while (true) {
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Less {},
+            rest break;
+        }
+
+        lexer_next_token(&parser.lexer);           # <
+
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Slash {
+                # zamykający tag </nazwa>
+                lexer_next_token(&parser.lexer);   # /
+                lexer_next_token(&parser.lexer);   # nazwa
+                lexer_next_token(&parser.lexer);   # >
+                break;
+            },
+            rest {}
+        }
+
+        # to kolejny klucz
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Literal {},
+            rest break;
+        }
+
+        let key = "";
+
+        match (parser.lexer.current_token.value) {
+            OptionTokenValue::None break;,
+            OptionTokenValue::Some(value) {
+                match (value) {
+                    TokenValue::Str(text) key = text;,
+                    rest break;
+                }
+            }
+        }
+
+        lexer_next_token(&parser.lexer);           # klucz
+
+        match (parser.lexer.current_token.kind) {
+            TokenKind::Greater {},
+            rest break;
+        }
+        lexer_next_token(&parser.lexer);           # >
+
+        vector_push(&keys, key);
+        vector_push(&nodes, parser_parse(&parser));
+    }
+
+    return OptionNode::Some(Node {
+        kind: NodeKind::KeyValue(KeyValueNode { keys, nodes }),
+        position: position_clone(&position)
+    });
+}

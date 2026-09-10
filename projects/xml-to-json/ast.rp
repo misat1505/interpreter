@@ -1,0 +1,94 @@
+import "./position.rp";
+
+enum NodeLiteral {
+    Str(str),
+    Number(i64)
+};
+
+fn node_literal_repr(&NodeLiteral lit): str {
+    let prefix = "NodeLiteral::";
+    match (lit) {
+        NodeLiteral::Str(text) return prefix + "Str(\"" + text + "\")";,
+        NodeLiteral::Number(number) return prefix + "Number(" + number as str + ")";
+    }
+}
+
+struct KeyValueNode {
+    str[] keys,
+    Node[] nodes
+};
+
+fn key_value_node_repr(&KeyValueNode kv): str {
+    let keys_str = "[";
+    let i = 0;
+    while (i < vector_size(&kv.keys)) {
+        if (i > 0) {
+            keys_str = keys_str + ", ";
+        }
+        keys_str = keys_str + "\"" + kv.keys[i] + "\"";
+        i = i + 1;
+    }
+    keys_str = keys_str + "]";
+
+    let nodes_str = "[";
+    i = 0;
+    while (i < vector_size(&kv.nodes)) {
+        if (i > 0) {
+            nodes_str = nodes_str + ", ";
+        }
+        nodes_str = nodes_str + node_repr(&kv.nodes[i]);
+        i = i + 1;
+    }
+    nodes_str = nodes_str + "]";
+
+    return "KeyValueNode { keys: " + keys_str + ", nodes: " + nodes_str + " }";
+}
+
+enum NodeKind {
+    Literal(NodeLiteral),
+    Array(Node[]),
+    KeyValue(KeyValueNode)
+};
+
+fn node_kind_repr(&NodeKind kind): str {
+    let prefix = "NodeKind::";
+    match (kind) {
+        NodeKind::Literal(lit) return prefix + "Literal(" + node_literal_repr(&lit) + ")";,
+        NodeKind::Array(nodes) {
+            let nodes_str = "[";
+            let i = 0;
+            while (i < vector_size(&nodes)) {
+                if (i > 0) {
+                    nodes_str = nodes_str + ", ";
+                }
+                nodes_str = nodes_str + node_repr(&nodes[i]);
+                i = i + 1;
+            }
+            nodes_str = nodes_str + "]";
+            return prefix + "Array(" + nodes_str + ")";
+        },
+        NodeKind::KeyValue(kv) return prefix + "KeyValue(" + key_value_node_repr(&kv) + ")";
+    }
+}
+
+struct Node {
+    NodeKind kind,
+    Position position
+};
+
+fn node_repr(&Node node): str {
+    return "Node { kind: " + node_kind_repr(&node.kind) + ", position: " + position_repr(&node.position) + " }";
+}
+
+enum OptionNode {
+    Some(Node),
+    None
+};
+
+fn option_node_repr(&OptionNode opt): str {
+    let prefix = "OptionNode::";
+    match (opt) {
+        OptionNode::None return prefix + "None";,
+        OptionNode::Some(node) return prefix + "Some(" + node_repr(&node) + ")";
+    }
+}
