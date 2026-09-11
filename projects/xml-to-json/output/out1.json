@@ -1,1 +1,17 @@
-{"company":{"departments":[{"budget":2000000,"head":"Dr. Alan Turing","name":"Engineering"},{"budget":1000000,"head":"Jane Doe","name":"Sales"}],"founded":1998}}
+{
+  "company": {
+    "departments": [
+      {
+        "budget": 2000000,
+        "head": "Dr. Alan Turing",
+        "name": "Engineering"
+      },
+      {
+        "budget": 1000000,
+        "head": "Jane Doe",
+        "name": "Sales"
+      }
+    ],
+    "founded": 1998
+  }
+}

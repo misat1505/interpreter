@@ -2,11 +2,12 @@ import "./ast.rp";
 
 
 struct JsonSerializer {
-    str serialized
+    str serialized,
+    i64 indentation
 };
 
 fn json_serializer_new(): JsonSerializer {
-    return JsonSerializer { serialized: "" };
+    return JsonSerializer { serialized: "", indentation: 0 };
 }
 
 fn json_serializer_serialize(&JsonSerializer serializer, &Node node): void {
@@ -18,26 +19,34 @@ fn json_serializer_serialize(&JsonSerializer serializer, &Node node): void {
 }
 
 fn json_serializer_serialize_kv_node(&JsonSerializer serializer, &KeyValueNode node): void {
-    serializer.serialized += "{";
+    serializer.serialized += "{\n";
+    serializer.indentation += 1;
 
     for (let i = 0; i < vector_size(&node.keys); i += 1) {
-        serializer.serialized += "\"" + node.keys[i] + "\":";
+        serializer.serialized += json_serializer_get_indentation(&serializer);
+        serializer.serialized += "\"" + node.keys[i] + "\": ";
         json_serializer_serialize(&serializer, &node.nodes[i]);
         if (i != vector_size(&node.keys) - 1) serializer.serialized += ",";
+        serializer.serialized += '\n';
     }
 
-    serializer.serialized += "}";
+    serializer.indentation -= 1;
+    serializer.serialized += json_serializer_get_indentation(&serializer) + "}";
 }
 
 fn json_serializer_serialize_arr_node(&JsonSerializer serializer, &Node[] nodes): void {
-    serializer.serialized += "[";
+    serializer.serialized += "[\n";
+    serializer.indentation += 1;
 
     for (let i = 0; i < vector_size(&nodes); i += 1) {
+        serializer.serialized += json_serializer_get_indentation(&serializer);
         json_serializer_serialize(&serializer, &nodes[i]);
         if (i != vector_size(&nodes) - 1) serializer.serialized += ",";
+        serializer.serialized += '\n';
     }
 
-    serializer.serialized += "]";
+    serializer.indentation -= 1;
+    serializer.serialized += json_serializer_get_indentation(&serializer) + "]";
 }
 
 fn json_serializer_serialize_literal_node(&JsonSerializer serializer, &NodeLiteral node): void {
@@ -45,4 +54,12 @@ fn json_serializer_serialize_literal_node(&JsonSerializer serializer, &NodeLiter
         NodeLiteral::Number(num) serializer.serialized += num as str;,
         NodeLiteral::Str(text) serializer.serialized += "\"" + text + "\"";
     }
+}
+
+fn json_serializer_get_indentation(&JsonSerializer serializer): str {
+    let indentation = "";
+    for (let i = 0; i < serializer.indentation; i += 1) {
+        indentation += "  ";
+    }
+    return indentation;
 }
