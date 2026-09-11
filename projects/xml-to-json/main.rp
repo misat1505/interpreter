@@ -1,5 +1,6 @@
 import "./lexer.rp";
 import "./parser.rp";
+import "./json-serializer.rp";
 
 
 fn main(): void {
@@ -7,7 +8,9 @@ fn main(): void {
     let lexer = lexer_new(source);
     let parser = parser_new(&lexer);
     let ast = parser_parse(&parser);
-    println(node_repr(&ast));
+    let serializer = json_serializer_new();
+    json_serializer_serialize(&serializer, &ast);
+    write_file("./projects/xml-to-json/output/out1.json", serializer.serialized);
 }
 
 main();

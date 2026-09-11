@@ -1,0 +1,48 @@
+import "./ast.rp";
+
+
+struct JsonSerializer {
+    str serialized
+};
+
+fn json_serializer_new(): JsonSerializer {
+    return JsonSerializer { serialized: "" };
+}
+
+fn json_serializer_serialize(&JsonSerializer serializer, &Node node): void {
+    match (node.kind) {
+        NodeKind::KeyValue(kv_node) json_serializer_serialize_kv_node(&serializer, &kv_node);,
+        NodeKind::Array(arr_node) json_serializer_serialize_arr_node(&serializer, &arr_node);,
+        NodeKind::Literal(literal_node) json_serializer_serialize_literal_node(&serializer, &literal_node);
+    }
+}
+
+fn json_serializer_serialize_kv_node(&JsonSerializer serializer, &KeyValueNode node): void {
+    serializer.serialized += "{";
+
+    for (let i = 0; i < vector_size(&node.keys); i += 1) {
+        serializer.serialized += "\"" + node.keys[i] + "\":";
+        json_serializer_serialize(&serializer, &node.nodes[i]);
+        if (i != vector_size(&node.keys) - 1) serializer.serialized += ",";
+    }
+
+    serializer.serialized += "}";
+}
+
+fn json_serializer_serialize_arr_node(&JsonSerializer serializer, &Node[] nodes): void {
+    serializer.serialized += "[";
+
+    for (let i = 0; i < vector_size(&nodes); i += 1) {
+        json_serializer_serialize(&serializer, &nodes[i]);
+        if (i != vector_size(&nodes) - 1) serializer.serialized += ",";
+    }
+
+    serializer.serialized += "]";
+}
+
+fn json_serializer_serialize_literal_node(&JsonSerializer serializer, &NodeLiteral node): void {
+    match (node) {
+        NodeLiteral::Number(num) serializer.serialized += num as str;,
+        NodeLiteral::Str(text) serializer.serialized += "\"" + text + "\"";
+    }
+}
